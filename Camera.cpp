@@ -19,8 +19,8 @@
 #include "MvCodeReaderPixelType.h"
 #include "turbojpeg.h"
 
-#include <opencv2/opencv.hpp>
-#include <opencv2/highgui.hpp>
+// #include <opencv2/opencv.hpp>
+// #include <opencv2/highgui.hpp>
 
 #define Camera_Width             "WidthMax"
 #define Camera_Height            "HeightMax"
@@ -389,86 +389,64 @@ public:
         return 1;
     }
 
-    void getImage(){
-                // ch:开始取流 | en:Start grab image
-        
-        MV_CODEREADER_IMAGE_OUT_INFO_EX2 stImageInfo = {0};
-        memset(&stImageInfo, 0, sizeof(MV_CODEREADER_IMAGE_OUT_INFO_EX2));
-        unsigned char * pData = NULL;
+    // void getImage(){
+    //             // ch:开始取流 | en:Start grab image
+       
+    //     MV_CODEREADER_IMAGE_OUT_INFO_EX2 stImageInfo = {0};
+    //     memset(&stImageInfo, 0, sizeof(MV_CODEREADER_IMAGE_OUT_INFO_EX2));
+    //     unsigned char * pData = NULL;
 
-        nRet = MV_CODEREADER_GetOneFrameTimeoutEx2(handle, &pData, &stImageInfo, 1000);
-        printf("Get One Frame: nChannelID[%d] Width[%d], Height[%d], nFrameNum[%d], nTriggerIndex[%d]\n", 
-                stImageInfo.nChannelID, stImageInfo.nWidth, stImageInfo.nHeight, stImageInfo.nFrameNum, stImageInfo.nTriggerIndex);
+    //     nRet = MV_CODEREADER_GetOneFrameTimeoutEx2(handle, &pData, &stImageInfo, 1000);
+    //     printf("Get One Frame: nChannelID[%d] Width[%d], Height[%d], nFrameNum[%d], nTriggerIndex[%d]\n", 
+    //             stImageInfo.nChannelID, stImageInfo.nWidth, stImageInfo.nHeight, stImageInfo.nFrameNum, stImageInfo.nTriggerIndex);
 
 
-        if (nRet == MV_CODEREADER_OK)
-        {
-			pthread_mutex_lock(&mutex);
-			MV_CODEREADER_RESULT_BCR_EX2* stBcrResult = (MV_CODEREADER_RESULT_BCR_EX2*)stImageInfo.UnparsedBcrList.pstCodeListEx2;
-			if(NULL != g_pstImageInfoEx2)
-			{
-				memcpy(g_pstImageInfoEx2, &stImageInfo, sizeof(MV_CODEREADER_IMAGE_OUT_INFO_EX2));
-			}
+    //     if (nRet == MV_CODEREADER_OK)
+    //     {
+	// 		pthread_mutex_lock(&mutex);
 			
-			if(NULL != g_pcDataBuf && stImageInfo.nFrameLen < g_nMaxImageSize)
-			{
-				memcpy(g_pcDataBuf, pData, stImageInfo.nFrameLen);
-			}
+	// 		if(NULL != g_pstImageInfoEx2)
+	// 		{
+	// 			memcpy(g_pstImageInfoEx2, &stImageInfo, sizeof(MV_CODEREADER_IMAGE_OUT_INFO_EX2));
+	// 		}
+			
+	// 		if(NULL != g_pcDataBuf && stImageInfo.nFrameLen < g_nMaxImageSize)
+	// 		{
+	// 			memcpy(g_pcDataBuf, pData, stImageInfo.nFrameLen);
+	// 		}
 
-            pthread_mutex_unlock(&mutex);
+    //         pthread_mutex_unlock(&mutex);
            
     
 
-        // FILE* pfile = NULL;
-        // char filename[MAX_PATH] = {0};    
-        // time_t sNow;
-        // time(&sNow);                                     // 获取系统时间作为保存图片文件名
-        // tm sTime = *localtime(&sNow);
-        // sprintf(filename,("%.4d%.2d%.2d%.2d%.2d%.2d.jpg"), (sTime.tm_year + 1900), (sTime.tm_mon + 1),
-        //     sTime.tm_mday, sTime.tm_hour, sTime.tm_min, sTime.tm_sec);
-        // pfile = fopen(filename,"wb+");
+    //     // FILE* pfile = NULL;
+    //     // char filename[MAX_PATH] = {0};    
+    //     // time_t sNow;
+    //     // time(&sNow);                                     // 获取系统时间作为保存图片文件名
+    //     // tm sTime = *localtime(&sNow);
+    //     // sprintf(filename,("%.4d%.2d%.2d%.2d%.2d%.2d.jpg"), (sTime.tm_year + 1900), (sTime.tm_mon + 1),
+    //     //     sTime.tm_mday, sTime.tm_hour, sTime.tm_min, sTime.tm_sec);
+    //     // pfile = fopen(filename,"wb+");
 	
-        // if(pfile == NULL)
-        // {
-		// 	pthread_mutex_unlock(&mutex);
-		// 	printf("Open file failed\n");
-        //     return ;
-        // }
-        // fwrite(g_pcDataBuf, 1, g_pstImageInfoEx2->nFrameLen, pfile);
-        // printf("Save JPG image success!\n");
-        // std::cout << "length: " << stImageInfo.nWidth << std::endl;
-        cv::Mat jpegImage;
-        cv::Mat scaledImage;
-        float scaleddown = 0.1;
-        // Read JPEG image data into OpenCV Mat
-        jpegImage = cv::imdecode(cv::Mat(1,g_pstImageInfoEx2->nFrameLen, CV_8UC1, g_pcDataBuf), cv::IMREAD_COLOR);
-
-        // Scale down the image
-        cv::resize(jpegImage, scaledImage, cv::Size(), scaleddown, scaleddown); // Scale down by 50% (adjust as needed)
-        char strChar[MAX_BCR_LEN] = {0};
-        BcrInfo BI;
-        BI = getData(stBcrResult, strChar);
-        for (u_int8_t i = 0; i < BI.count; i++)
-            {
-                // Get the points for drawing polygon
-                std::vector<cv::Point> points;
-                points.push_back(cv::Point(BI.info[i].xpoint1*scaleddown, BI.info[i].ypoint1*scaleddown));
-                points.push_back(cv::Point(BI.info[i].xpoint2*scaleddown, BI.info[i].ypoint2*scaleddown));
-                points.push_back(cv::Point(BI.info[i].xpoint3*scaleddown, BI.info[i].ypoint3*scaleddown));
-                points.push_back(cv::Point(BI.info[i].xpoint4*scaleddown, BI.info[i].ypoint4*scaleddown));
-
-                // Draw the polygon
-                cv::polylines(scaledImage, points, true, cv::Scalar(255, 255, 0), 2);
-            }
-        cv::imshow("Live Stream", scaledImage);
-                // scnr.sendImageOverSocket(clientSocket, scaledImage);
-        cv::waitKey(0);
-
-			// //pthread_mutex_unlock(&mutex);
+    //     // if(pfile == NULL)
+    //     // {
+	// 	// 	pthread_mutex_unlock(&mutex);
+	// 	// 	printf("Open file failed\n");
+    //     //     return ;
+    //     // }
+    //     // fwrite(g_pcDataBuf, 1, g_pstImageInfoEx2->nFrameLen, pfile);
+    //     // printf("Save JPG image success!\n");
+    //     // std::cout << "length: " << stImageInfo.nWidth << std::endl;
+    //     // cv::Mat Image = bufferToImage(g_pcDataBuf,stImageInfo.nHeight, stImageInfo.nWidth, 1);
+    //     // cv::Mat resizedMat(640, 480, CV_8UC1, resizedImageData);
+    //     // cv::imshow("Image", scaledImage);
+	// 	// cv::waitKey(0);
+    //     // cv::destroyAllWindows();
+	// 		// //pthread_mutex_unlock(&mutex);
             
-        }
+    //     }
         
-    }
+    // }
     struct ImageInfo {
     unsigned char* pData;
     int nFrameLen;
@@ -477,39 +455,39 @@ public:
 };
 
 // Modify the function signature to return the ImageInfo struct
-// ImageInfo getImage() {
-//     // ch:开始取流 | en:Start grab image
-//     MV_CODEREADER_IMAGE_OUT_INFO_EX2 stImageInfo = {0};
-//     memset(&stImageInfo, 0, sizeof(MV_CODEREADER_IMAGE_OUT_INFO_EX2));
-//     unsigned char* pData = NULL;
-//     int nRet = MV_CODEREADER_GetOneFrameTimeoutEx2(handle, &pData, &stImageInfo, 1000);
-//     // std::cout << "Get One Frame: nChannelID[" << stImageInfo.nChannelID << "] Width[" << stImageInfo.nWidth
-//     //           << "], Height[" << stImageInfo.nHeight << "], nFrameNum[" << stImageInfo.nFrameNum
-//     //           << "], nTriggerIndex[" << stImageInfo.nTriggerIndex << "]" << std::endl;
+ImageInfo getImage() {
+    // ch:开始取流 | en:Start grab image
+    MV_CODEREADER_IMAGE_OUT_INFO_EX2 stImageInfo = {0};
+    memset(&stImageInfo, 0, sizeof(MV_CODEREADER_IMAGE_OUT_INFO_EX2));
+    unsigned char* pData = NULL;
+    int nRet = MV_CODEREADER_GetOneFrameTimeoutEx2(handle, &pData, &stImageInfo, 1000);
+    // std::cout << "Get One Frame: nChannelID[" << stImageInfo.nChannelID << "] Width[" << stImageInfo.nWidth
+    //           << "], Height[" << stImageInfo.nHeight << "], nFrameNum[" << stImageInfo.nFrameNum
+    //           << "], nTriggerIndex[" << stImageInfo.nTriggerIndex << "]" << std::endl;
 
-//     ImageInfo imageInfo;
+    ImageInfo imageInfo;
 
-//     if (nRet == MV_CODEREADER_OK) {
-//         pthread_mutex_lock(&mutex);
-//         if (NULL != g_pstImageInfoEx2) {
-//             memcpy(g_pstImageInfoEx2, &stImageInfo, sizeof(MV_CODEREADER_IMAGE_OUT_INFO_EX2));
-//         }
+    if (nRet == MV_CODEREADER_OK) {
+        pthread_mutex_lock(&mutex);
+        if (NULL != g_pstImageInfoEx2) {
+            memcpy(g_pstImageInfoEx2, &stImageInfo, sizeof(MV_CODEREADER_IMAGE_OUT_INFO_EX2));
+        }
 
-//         if (NULL != g_pcDataBuf && stImageInfo.nFrameLen < g_nMaxImageSize) {
-//             memcpy(g_pcDataBuf, pData, stImageInfo.nFrameLen);
-//         }
+        if (NULL != g_pcDataBuf && stImageInfo.nFrameLen < g_nMaxImageSize) {
+            memcpy(g_pcDataBuf, pData, stImageInfo.nFrameLen);
+        }
 
-//         pthread_mutex_unlock(&mutex);
+        pthread_mutex_unlock(&mutex);
 
-//         // Fill the imageInfo struct with the obtained data
-//         imageInfo.pData = pData;
-//         imageInfo.nFrameLen = stImageInfo.nFrameLen;
-//         imageInfo.nWidth = stImageInfo.nWidth;
-//         imageInfo.nHeight = stImageInfo.nHeight;
-//     }
+        // Fill the imageInfo struct with the obtained data
+        imageInfo.pData = pData;
+        imageInfo.nFrameLen = stImageInfo.nFrameLen;
+        imageInfo.nWidth = stImageInfo.nWidth;
+        imageInfo.nHeight = stImageInfo.nHeight;
+    }
 
-//     return imageInfo;
-// }
+    return imageInfo;
+}
 
 // cv::Mat getImage2() {
 //                  // ch:开始取流 | en:Start grab image
@@ -570,105 +548,105 @@ public:
 
 // }
 
-void* capture(){
-    // nRet = MV_CODEREADER_StartGrabbing(handle);
-    //     if (MV_CODEREADER_OK != nRet)
-    //     {
-    //         printf("Start Grabbing fail! nRet [%#x]\r\n", nRet);
-    //     }
-    //     else
-    //     {
-    //         printf("Start Grabbing succeed!\r\n");
-    //     }
-    imageData iD;
-    BcrInfo BI;
-    // unsigned char * pstDisplayImage = NULL;
-    MV_CODEREADER_IMAGE_OUT_INFO_EX2 stImageInfo = {0};
-    memset(&stImageInfo, 0, sizeof(MV_CODEREADER_IMAGE_OUT_INFO_EX2));
-    unsigned char * pData = NULL;
-    bool printed = false;
+// void* capture(){
+//     nRet = MV_CODEREADER_StartGrabbing(handle);
+//         if (MV_CODEREADER_OK != nRet)
+//         {
+//             printf("Start Grabbing fail! nRet [%#x]\r\n", nRet);
+//         }
+//         else
+//         {
+//             printf("Start Grabbing succeed!\r\n");
+//         }
+//     imageData iD;
+//     BcrInfo BI;
+//     // unsigned char * pstDisplayImage = NULL;
+//     MV_CODEREADER_IMAGE_OUT_INFO_EX2 stImageInfo = {0};
+//     memset(&stImageInfo, 0, sizeof(MV_CODEREADER_IMAGE_OUT_INFO_EX2));
+//     unsigned char * pData = NULL;
+//     bool printed = false;
 
-        // time start
-        // std::cout << "Time Start" << std::endl;
+//         // time start
+//         // std::cout << "Time Start" << std::endl;
             
-        auto beg = high_resolution_clock::now();
-        // if (g_bExit || printed == true)
-        // {
-        //     break;
-        // }
-        nRet = MV_CODEREADER_GetOneFrameTimeoutEx2(handle, &pData, &stImageInfo, 1000);
-        if (nRet == MV_CODEREADER_OK)
-        {  
-			MV_CODEREADER_RESULT_BCR_EX2* stBcrResult = (MV_CODEREADER_RESULT_BCR_EX2*)stImageInfo.UnparsedBcrList.pstCodeListEx2;
+//         auto beg = high_resolution_clock::now();
+//         // if (g_bExit || printed == true)
+//         // {
+//         //     break;
+//         // }
+//         nRet = MV_CODEREADER_GetOneFrameTimeoutEx2(handle, &pData, &stImageInfo, 1000);
+//         if (nRet == MV_CODEREADER_OK)
+//         {  
+// 			MV_CODEREADER_RESULT_BCR_EX2* stBcrResult = (MV_CODEREADER_RESULT_BCR_EX2*)stImageInfo.UnparsedBcrList.pstCodeListEx2;
             
-			char strChar[MAX_BCR_LEN] = {0};
-            //std::cout<<"results: "<<stBcrResult<<std::endl;
-            if (stBcrResult->nCodeNum != 0){
-                BI = getData(stBcrResult, strChar);
-                std::cout<<"results: "<<std::endl;
+// 			char strChar[MAX_BCR_LEN] = {0};
+//             //std::cout<<"results: "<<stBcrResult<<std::endl;
+//             if (stBcrResult->nCodeNum != 0){
+//                 BI = getData(stBcrResult, strChar);
+//                 std::cout<<"results: "<<std::endl;
 
-            }
-            else{
-                BI = resetData();
-            }
-			if(NULL != iD.g_pstImageInfoEx2)
-			{
-				memcpy(iD.g_pstImageInfoEx2, &stImageInfo, sizeof(MV_CODEREADER_IMAGE_OUT_INFO_EX2));
-			}
+//             }
+//             else{
+//                 BI = resetData();
+//             }
+// 			if(NULL != iD.g_pstImageInfoEx2)
+// 			{
+// 				memcpy(iD.g_pstImageInfoEx2, &stImageInfo, sizeof(MV_CODEREADER_IMAGE_OUT_INFO_EX2));
+// 			}
 			
-			if(NULL != iD.g_pcDataBuf && stImageInfo.nFrameLen < iD.g_nMaxImageSize)
-			{
-				memcpy(iD.g_pcDataBuf, pData, stImageInfo.nFrameLen);
-			}
-            // time stop
-            if(iD.g_pstImageInfoEx2->nFrameLen > 1){
-                if(!printed){
-                    char filename[MAX_PATH] = {0};
-                    time_t sNow;
-                    time(&sNow);                                     // 获取系统时间作为保存图片文件名
-                    tm sTime = *localtime(&sNow);
-                    sprintf(filename,("%.4d%.2d%.2d%.2d%.2d%.2d.jpeg"), (sTime.tm_year + 1900), (sTime.tm_mon + 1),
-                            sTime.tm_mday, sTime.tm_hour, sTime.tm_min, sTime.tm_sec);
-                    cv::Mat jpegImage;
-                    cv::Mat scaledImage;
-                    float scaleddown = 0.001;
-                    // Read JPEG image data into OpenCV Mat
-                    jpegImage = cv::imdecode(cv::Mat(1, iD.g_pstImageInfoEx2->nFrameLen, CV_8UC1, iD.g_pcDataBuf), cv::IMREAD_COLOR);
+// 			if(NULL != iD.g_pcDataBuf && stImageInfo.nFrameLen < iD.g_nMaxImageSize)
+// 			{
+// 				memcpy(iD.g_pcDataBuf, pData, stImageInfo.nFrameLen);
+// 			}
+//             // time stop
+//             if(iD.g_pstImageInfoEx2->nFrameLen > 1){
+//                 if(!printed){
+//                     char filename[MAX_PATH] = {0};
+//                     time_t sNow;
+//                     time(&sNow);                                     // 获取系统时间作为保存图片文件名
+//                     tm sTime = *localtime(&sNow);
+//                     sprintf(filename,("%.4d%.2d%.2d%.2d%.2d%.2d.jpeg"), (sTime.tm_year + 1900), (sTime.tm_mon + 1),
+//                             sTime.tm_mday, sTime.tm_hour, sTime.tm_min, sTime.tm_sec);
+//                     cv::Mat jpegImage;
+//                     cv::Mat scaledImage;
+//                     float scaleddown = 0.001;
+//                     // Read JPEG image data into OpenCV Mat
+//                     jpegImage = cv::imdecode(cv::Mat(1, iD.g_pstImageInfoEx2->nFrameLen, CV_8UC1, iD.g_pcDataBuf), cv::IMREAD_COLOR);
 
-                    // Scale down the image
-                    cv::resize(jpegImage, scaledImage, cv::Size(), scaleddown, scaleddown); // Scale down by 50% (adjust as needed)
-                    for (u_int8_t i = 0; i < BI.count; i++)
-                    {
-                        // Get the points for drawing polygon
-                        std::vector<cv::Point> points;
-                        points.push_back(cv::Point(BI.info[i].xpoint1*scaleddown, BI.info[i].ypoint1*scaleddown));
-                        points.push_back(cv::Point(BI.info[i].xpoint2*scaleddown, BI.info[i].ypoint2*scaleddown));
-                        points.push_back(cv::Point(BI.info[i].xpoint3*scaleddown, BI.info[i].ypoint3*scaleddown));
-                        points.push_back(cv::Point(BI.info[i].xpoint4*scaleddown, BI.info[i].ypoint4*scaleddown));
+//                     // Scale down the image
+//                     cv::resize(jpegImage, scaledImage, cv::Size(), scaleddown, scaleddown); // Scale down by 50% (adjust as needed)
+//                     for (u_int8_t i = 0; i < BI.count; i++)
+//                     {
+//                         // Get the points for drawing polygon
+//                         std::vector<cv::Point> points;
+//                         points.push_back(cv::Point(BI.info[i].xpoint1*scaleddown, BI.info[i].ypoint1*scaleddown));
+//                         points.push_back(cv::Point(BI.info[i].xpoint2*scaleddown, BI.info[i].ypoint2*scaleddown));
+//                         points.push_back(cv::Point(BI.info[i].xpoint3*scaleddown, BI.info[i].ypoint3*scaleddown));
+//                         points.push_back(cv::Point(BI.info[i].xpoint4*scaleddown, BI.info[i].ypoint4*scaleddown));
 
-                        // Draw the polygon
-                        cv::polylines(scaledImage, points, true, cv::Scalar(255, 255, 0), 2);
-                    }
-                    bool success = cv::imwrite(filename, scaledImage); 
-                    if (!success) {
-                        std::cerr << "Error saving image." << std::endl;
-                    }
+//                         // Draw the polygon
+//                         cv::polylines(scaledImage, points, true, cv::Scalar(255, 255, 0), 2);
+//                     }
+//                     bool success = cv::imwrite(filename, scaledImage); 
+//                     if (!success) {
+//                         std::cerr << "Error saving image." << std::endl;
+//                     }
                     
-                    printed = true;
-                }
-            }
-            auto end = high_resolution_clock::now();
-            auto duration = duration_cast<milliseconds>(end - beg);
-            std::cout << "Processing Time: " << duration.count();
-            std::cout << " ms\r\n" << std::endl;
-        }
-        else
-        {
-            printf("Wait\r\n");
-        }
+//                     printed = true;
+//                 }
+//             }
+//             auto end = high_resolution_clock::now();
+//             auto duration = duration_cast<milliseconds>(end - beg);
+//             std::cout << "Processing Time: " << duration.count();
+//             std::cout << " ms\r\n" << std::endl;
+//         }
+//         else
+//         {
+//             printf("Wait\r\n");
+//         }
     
-    return nullptr;
-}
+//     return nullptr;
+// }
 
 // void getString(){
 //         nRet = MV_CODEREADER_StartGrabbing(handle);
@@ -790,39 +768,39 @@ char* getString() {
 
 };
 
-int main(){
-    Camera cam1;
+// int main(){
+//     Camera cam1;
     
-    cam1.init();
-    usleep(1000000);
-    // cam1.getImage();
-    // cv::imshow("Image", cam1.getImage());
-    cam1.getImage();
-    // cv::waitKey(0); // Wait for a key press indefinitely
-    // cv::destroyAllWindows(); // Close all OpenCV windows
+//     cam1.init();
+//     usleep(1000000);
+//     // cam1.getImage();
+//     // cv::imshow("Image", cam1.getImage());
+//     // cam1.capture();
+//     // cv::waitKey(0); // Wait for a key press indefinitely
+//     // cv::destroyAllWindows(); // Close all OpenCV windows
     
-    // char* output = cam1.getString();
-    // std::cout<<"results: "<< output <<std::endl;
-    cam1.DeInitResources();
-}
+//     // char* output = cam1.getString();
+//     // std::cout<<"results: "<< output <<std::endl;
+//     cam1.DeInitResources();
+// }
 
-// extern "C" {
-//         Camera cam1;
+extern "C" {
+        Camera cam1;
         
 
-//     int init_camera() {
-//         return cam1.init();
-//     }
-//     const char* get_string() {
-//         std::string str = cam1.getString();
-//         char* cstr = new char[str.length() + 1]; // Allocate memory for C-style string
-//         strcpy(cstr, str.c_str()); // Copy the content of std::string to char*
-//         return cstr;
-//     }
-//     Camera::ImageInfo get_image(){
-//         return cam1.getImage();
-//     }
-//     int close_camera(){
-//         return cam1.DeInitResources();
-//     }
-// }
+    int init_camera() {
+        return cam1.init();
+    }
+    const char* get_string() {
+        std::string str = cam1.getString();
+        char* cstr = new char[str.length() + 1]; // Allocate memory for C-style string
+        strcpy(cstr, str.c_str()); // Copy the content of std::string to char*
+        return cstr;
+    }
+    Camera::ImageInfo get_image(){
+        return cam1.getImage();
+    }
+    int close_camera(){
+        return cam1.DeInitResources();
+    }
+}

@@ -59,20 +59,6 @@
         "typeindex": "cpp",
         "typeinfo": "cpp",
         "variant": "cpp",
-        "bit": "cpp",
-        "csignal": "cpp",
-        "any": "cpp",
-        "strstream": "cpp",
-        "codecvt": "cpp",
-        "compare": "cpp",
-        "concepts": "cpp",
-        "coroutine": "cpp",
-        "unordered_set": "cpp",
-        "regex": "cpp",
-        "source_location": "cpp",
-        "future": "cpp",
-        "numbers": "cpp",
-        "semaphore": "cpp",
-        "stop_token": "cpp"
+        "bit": "cpp"
     }
 }
