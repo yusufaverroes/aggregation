@@ -1,4 +1,5 @@
 
+#include "CameraLib.hpp"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,19 +37,19 @@ const u_int8_t MAX_BCR_INFO = 100;
 
 using namespace std::chrono;
 
-class Camera {
-private:
-    int nRet = MV_CODEREADER_OK;
-    void* handle = NULL;
-	bool bIsNormalRun = true;
-    bool g_bExit = false;
 
-    unsigned int g_nMaxImageSize = 0;
-    MV_CODEREADER_IMAGE_OUT_INFO_EX2* g_pstImageInfoEx2;
-    unsigned char* g_pcDataBuf;
 
-    pthread_mutex_t mutex;
-        struct BcrInfo {
+    Camera:: nRet = MV_CODEREADER_OK;
+    Camera::* handle = NULL;
+	Camera:: bIsNormalRun = true;
+    Camera:: g_bExit = false;
+
+    int Camera ::g_nMaxImageSize = 0;
+    MV_CODEREADER_IMAGE_OUT_INFO_EX2* Camera:: g_pstImageInfoEx2;
+    char* Camera::g_pcDataBuf;
+
+    pthread_mutex_t Camera::mutex;
+    struct Camera::BcrInfo {
             struct {
                 int xpoint1;
                 int xpoint2;
@@ -65,14 +66,14 @@ private:
             } info[MAX_BCR_INFO]; // Array to hold multiple sets of coordinates and numBrcd
             u_int8_t count; // Keep track of the number of elements in the array
         };
-        struct imageData
-        {
-            unsigned int g_nMaxImageSize = 0;
-            MV_CODEREADER_IMAGE_OUT_INFO_EX2* g_pstImageInfoEx2;
-            unsigned char* g_pcDataBuf;
-        };
+        // struct imageData
+        // {
+        //     unsigned int g_nMaxImageSize = 0;
+        //     MV_CODEREADER_IMAGE_OUT_INFO_EX2* g_pstImageInfoEx2;
+        //     unsigned char* g_pcDataBuf;
+        // };
 
-    int GB2312ToUTF8(char* szSrc, size_t iSrcLen, char* szDst, size_t iDstLen){
+    int Camera::GB2312ToUTF8(char* szSrc, size_t iSrcLen, char* szDst, size_t iDstLen){
     iconv_t cd = iconv_open("utf-8//IGNORE", "gb2312//IGNORE");
 	if(0 == cd)
     {
@@ -90,7 +91,7 @@ private:
     iconv_close(cd);
     return 0;
 }
-   BcrInfo getData(MV_CODEREADER_RESULT_BCR_EX2* stBcrResult, char strChar[MAX_BCR_LEN]){
+   BcrInfo Camera:: getData(MV_CODEREADER_RESULT_BCR_EX2* stBcrResult, char strChar[MAX_BCR_LEN]){
         BcrInfo BI;
         char *output_string;
         for (unsigned int i = 0; i < stBcrResult->nCodeNum; i++)
@@ -137,14 +138,14 @@ private:
 
         return BI;
     }
-    BcrInfo resetData(){
+    BcrInfo Camera::resetData(){
         BcrInfo BI;
         BI.count = 0;
         return BI;
     }
 
     // ch:初始化资源用于存储图像信息 | en：Initialize resources to store the image
-    int InitResource(void* pHandle)
+    int Camera:: InitResource(void* pHandle)
     {
         int nRet = MV_CODEREADER_OK;
 
@@ -215,8 +216,8 @@ private:
     }
 
     
-public:
-    int init(){
+
+    int Camera:: init(){
         MV_CODEREADER_DEVICE_INFO_LIST stDeviceList;
         memset(&stDeviceList, 0, sizeof(MV_CODEREADER_DEVICE_INFO_LIST));
         nRet = MV_CODEREADER_EnumDevices(&stDeviceList, MV_CODEREADER_GIGE_DEVICE);
@@ -289,7 +290,7 @@ public:
 
 
     }
-    int DeInitResources()
+    int Camera:: DeInitResources()
     {
          nRet = MV_CODEREADER_StopGrabbing(handle);
         if (MV_CODEREADER_OK != nRet)
@@ -349,7 +350,7 @@ public:
         return 1;
     }
 
-    cv::Mat getImage(){
+    cv::Mat Camera:: getImage(){
                 // ch:开始取流 | en:Start grab image
         cv::Mat scaledImage;
         MV_CODEREADER_IMAGE_OUT_INFO_EX2 stImageInfo = {0};
@@ -410,7 +411,7 @@ public:
 
 
 
-char* getString() {
+char* Camer:: getString() {
     char* result_string = NULL;
     char temp_string[MAX_BCR_LEN] = {0}; // Temporary string buffer
     int total_length = 0; // Total length of the result string
@@ -476,7 +477,7 @@ char* getString() {
     return result_string;
 }
 
-};
+
 
 // int main(){
 //     Camera cam1;

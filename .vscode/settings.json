@@ -73,6 +73,8 @@
         "future": "cpp",
         "numbers": "cpp",
         "semaphore": "cpp",
-        "stop_token": "cpp"
+        "stop_token": "cpp",
+        "*.ipp": "cpp",
+        "shared_mutex": "cpp"
     }
 }

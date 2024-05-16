@@ -565,7 +565,11 @@ public:
 
         {
             lock_guard<mutex> guard(m_action_lock);
-            m_connections[hdl] = client_id; // Associate the client's connection handle with the provided unique identifier
+            if(client_id.length()>0){
+                m_connections[hdl] = client_id; // Associate the client's connection handle with the provided unique identifier
+            }else{
+                m_connections[hdl] = "client1";
+            }
             std::cout << "Client connected with ID: " << client_id << std::endl;
         }
 
@@ -594,66 +598,115 @@ public:
         }
         m_action_cond.notify_one();
     }
-    void looping(){
-            while(1){
-            // if (!stop_streaming)
-            // {
-                // if (b!=NULL && !b->hdl.expired()){
-                    if (b!=NULL ){
-                    con_list::iterator it = m_connections.find(b->hdl);
+    // void looping(){
+    //         while(1){
+    //         // if (!stop_streaming)
+    //         // {
+    //             // if (b!=NULL && !b->hdl.expired()){
+    //                 if (b!=NULL ){
+    //                 con_list::iterator it = m_connections.find(b->hdl);
                     
-                    if (it != m_connections.end())
+    //                 if (it != m_connections.end())
+    //                 {
+    //                     std::string client_id = it->second;
+    //                     // if (client_id == "client1" && streaming_to_client1)
+    //                     if (stop_streaming==false && get_data==false) 
+    //                     {   
+    //                         // cv::imshow("test",cam1.getImage());
+    //                         // cv::waitKey(0);
+    //                         std::vector<unsigned char> buf;
+    //                         imencode(".jpeg", cam1.getImage(), buf); 
+    //                         // m_server.send(b->hdl, "a", websocketpp::frame::opcode::text);
+    //                         m_server.send(b->hdl,  buf.data(), buf.size(), websocketpp::frame::opcode::binary);
+    //                     }
+    //                     else if (get_data==true){   
+    //                             if (client2_data_count < max_client2_data_count){
+    //                             m_server.send(b->hdl, cam1.getString(), websocketpp::frame::opcode::text);
+    //                             client2_data_count++;
+    //                             }else{
+    //                                 stop_streaming=false;
+    //                                 get_data=false;
+    //                                 client2_data_count=0;
+    //                             }
+                                
+    //                     }
+    //                     // else if (client_id == "client2" && streaming_to_client2)
+    //                     // {
+    //                     //     if (client2_data_count < max_client2_data_count)
+    //                     //     {
+    //                     //         //get string data here
+    //                     //         // m_server.send(b->hdl, "b", websocketpp::frame::opcode::text);
+    //                     //         m_server.send(b->hdl, cam1.getString(), websocketpp::frame::opcode::text);
+    //                     //         client2_data_count++;
+    //                     //     }
+    //                     //     else
+    //                     //     {
+    //                     //         streaming_to_client2 = false;
+    //                     //         streaming_to_client1 = true;
+    //                     //     }
+    //                     // }
+    //                 }
+    //             // }
+    //             // else
+    //             // {
+    //             //     streaming_to_client1 = false;
+    //             //     streaming_to_client2 = false;
+    //             //     stop_streaming = false;
+    //             // }
+    //         }
+    //         //Rey delay
+    //         //usleep(1000000);
+    //         //Rizal Delay
+    //         usleep(100000);    
+    //     }
+    // }
+
+    void looping()
+    {
+        while (1)
+        {
+            if (!stop_streaming)
+            {
+                if (b != NULL)
+                { 
+
+                    for (auto it = m_connections.begin(); it != m_connections.end(); ++it)
                     {
                         std::string client_id = it->second;
-                        // if (client_id == "client1" && streaming_to_client1)
-                        if (stop_streaming==false && get_data==false) 
-                        {   
-                            // cv::imshow("test",cam1.getImage());
-                            // cv::waitKey(0);
+                        if (client_id == "client1" && streaming_to_client1)
+                        { // get image data here
                             std::vector<unsigned char> buf;
                             imencode(".jpeg", cam1.getImage(), buf); 
-                            // m_server.send(b->hdl, "a", websocketpp::frame::opcode::text);
-                            m_server.send(b->hdl,  buf.data(), buf.size(), websocketpp::frame::opcode::binary);
+                             // m_server.send(b->hdl, "a", websocketpp::frame::opcode::text);
+                            m_server.send(it->first,  buf.data(), buf.size(), websocketpp::frame::opcode::binary);
+                            // m_server.send(it->first, "a", websocketpp::frame::opcode::text);
                         }
-                        else if (get_data==true){   
-                                if (client2_data_count < max_client2_data_count){
-                                m_server.send(b->hdl, cam1.getString(), websocketpp::frame::opcode::text);
+                        else if (client_id == "client2" && streaming_to_client2)
+                        {
+                            if (client2_data_count < max_client2_data_count)
+                            {
+                                // get string data here
+                                m_server.send(it->first, cam1.getString(), websocketpp::frame::opcode::text);
+                                // m_server.send(it->first, "b", websocketpp::frame::opcode::text);
                                 client2_data_count++;
-                                }else{
-                                    stop_streaming=false;
-                                    get_data=false;
-                                    client2_data_count=0;
-                                }
-                                
+                            }
+                            else
+                            {
+                                streaming_to_client2 = false;
+                                streaming_to_client1 = true;
+                                client2_data_count = 0;
+                            }
                         }
-                        // else if (client_id == "client2" && streaming_to_client2)
-                        // {
-                        //     if (client2_data_count < max_client2_data_count)
-                        //     {
-                        //         //get string data here
-                        //         // m_server.send(b->hdl, "b", websocketpp::frame::opcode::text);
-                        //         m_server.send(b->hdl, cam1.getString(), websocketpp::frame::opcode::text);
-                        //         client2_data_count++;
-                        //     }
-                        //     else
-                        //     {
-                        //         streaming_to_client2 = false;
-                        //         streaming_to_client1 = true;
-                        //     }
-                        // }
                     }
-                // }
-                // else
-                // {
-                //     streaming_to_client1 = false;
-                //     streaming_to_client2 = false;
-                //     stop_streaming = false;
-                // }
+                }
+                else
+                {
+                    // streaming_to_client1 = false;
+                    // streaming_to_client2 = false;
+                    // stop_streaming = false;
+                }
             }
-            //Rey delay
-            //usleep(1000000);
-            //Rizal Delay
-            usleep(100000);    
+            usleep(1000000);
         }
     }
 
@@ -687,25 +740,35 @@ public:
             {
                 std::string message = a.msg->get_payload();
 
+                // if (message == "stop_streaming")
+                // {
+                //     stop_streaming = true;
+                // }
+                // else if (message=="start_stream")
+                // {
+                //     // streaming_to_client1 = false;
+                //     // streaming_to_client2 = true;
+                //     // client2_data_count = 0;
+                //     stop_streaming = false;
+                // }else if(message=="get_data"){
+                //     stop_streaming = true;
+                //     get_data=true;
+                // }
                 if (message == "stop_streaming")
                 {
                     stop_streaming = true;
                 }
-                else if (message=="start_stream")
+                else if (message == "get_data")
                 {
-                    // streaming_to_client1 = false;
-                    // streaming_to_client2 = true;
-                    // client2_data_count = 0;
-                    stop_streaming = false;
-                }else if(message=="get_data"){
-                    stop_streaming = true;
-                    get_data=true;
+                    streaming_to_client1 = false;
+                    streaming_to_client2 = true;
+                    client2_data_count = 0;
+                }else if (message == "start_streaming")
+                {
+                    stop_streaming=false;
+                    streaming_to_client1 = true;
                 }
-                // }else if (message == "start_streaming")
-                // {
-                //     stop_streaming=false;
-                //     streaming_to_client1 = true;
-                // }
+     
             }
 
             // if (!stop_streaming) // TODO : spllit into another thread from here, to make looping
