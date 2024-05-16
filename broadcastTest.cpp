@@ -706,7 +706,7 @@ public:
                     // stop_streaming = false;
                 }
             }
-            usleep(1000000);
+            usleep(500000);
         }
     }
 
@@ -841,6 +841,7 @@ int main()
 
         // Run the ASIO io_service with the main thread
         server_instance.run(9002);
+        std::cout<<"server run"<<std::endl;
 
         // Wait for the processing thread to finish
         t.join();

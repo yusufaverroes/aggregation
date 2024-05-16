@@ -173,8 +173,11 @@ struct core {
      *
      * Default is all except for development/debug level errors
      */
-    static const websocketpp::log::level elog_level =
-        websocketpp::log::elevel::all ^ websocketpp::log::elevel::devel;
+    // static const websocketpp::log::level elog_level =
+    //     websocketpp::log::elevel::all ^ websocketpp::log::elevel::devel;
+
+     static const websocketpp::log::level elog_level =
+        websocketpp::log::elevel::none;
 
     /// Default static access logging channels
     /**
@@ -186,8 +189,10 @@ struct core {
      *
      * Default is all except for development/debug level access messages
      */
+    // static const websocketpp::log::level alog_level =
+    //     websocketpp::log::alevel::all ^ websocketpp::log::alevel::devel;
     static const websocketpp::log::level alog_level =
-        websocketpp::log::alevel::all ^ websocketpp::log::alevel::devel;
+        websocketpp::log::alevel::connect || websocketpp::log::alevel::disconnect; // yusuf was here
 
     /// Size of the per-connection read buffer
     /**
