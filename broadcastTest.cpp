@@ -25,7 +25,7 @@
 #define Camera_PayloadSize       "PayloadSize"
 
 // ch:中文转换条码长度定义 | en：Chinese coding format len
-#define MAX_BCR_LEN  512
+#define MAX_BCR_LEN  2048
 
 #define IMAGE_EX_LEN 4096
 #define MAX_PATH     260
@@ -428,25 +428,27 @@ char* getString() {
             printf("CodeNum[%d]\n", stBcrResult->nCodeNum);
 
 			char strChar[MAX_BCR_LEN] = {0};
-            
+           
 
             
 
             for (int i = 0; i < stBcrResult->nCodeNum; i++) {
+            
                 memset(strChar, 0, MAX_BCR_LEN);
+        
                 GB2312ToUTF8(stBcrResult->stBcrInfoEx[i].chCode, strlen(stBcrResult->stBcrInfoEx[i].chCode), strChar, MAX_BCR_LEN);
-
+                
                 
                 // Allocate memory for output_string
                 char* output_string = (char*)malloc(MAX_BCR_LEN * sizeof(char)); 
+          
                 if (output_string == NULL) {
                     printf("Memory allocation failed!\n");
                     continue; // Skip to the next iteration
                 }
 
                 // Format the output string
-                int result = snprintf(output_string, MAX_BCR_LEN, "%d:%s:%d;", i, strChar, stBcrResult->stBcrInfoEx->nIDRScore);
-                
+                int result = snprintf(output_string, MAX_BCR_LEN, "%s:%d;", strChar, stBcrResult->stBcrInfoEx->nIDRScore);
                 // Check if the formatting was successful and the string wasn't truncated
                 if (result < 0 || result >= MAX_BCR_LEN) {
                     printf("Formatting error or string truncated!\n");
@@ -662,19 +664,22 @@ public:
     // }
 
     void looping()
-    {
+    { int siapNgebut=0;
         while (1)
         {
             if (!stop_streaming)
             {
-                if (b != NULL)
+                if (m_connections.size() >0)
                 { 
+
+                    
 
                     for (auto it = m_connections.begin(); it != m_connections.end(); ++it)
                     {
                         std::string client_id = it->second;
                         if (client_id == "client1" && streaming_to_client1)
                         { // get image data here
+                            siapNgebut++;
                             std::vector<unsigned char> buf;
                             imencode(".jpeg", cam1.getImage(), buf); 
                              // m_server.send(b->hdl, "a", websocketpp::frame::opcode::text);
@@ -686,7 +691,13 @@ public:
                             if (client2_data_count < max_client2_data_count)
                             {
                                 // get string data here
-                                m_server.send(it->first, cam1.getString(), websocketpp::frame::opcode::text);
+                                try{
+                                    m_server.send(it->first, cam1.getString(), websocketpp::frame::opcode::text);
+                                    std::cout<<"success sending strings"<<std::endl;
+                                }catch( std::exception const &e) {
+                                    std::cout<<"error on getting or sending string : "<<e.what()<<std::endl;
+                                }
+                                
                                 // m_server.send(it->first, "b", websocketpp::frame::opcode::text);
                                 client2_data_count++;
                             }
@@ -706,7 +717,13 @@ public:
                     // stop_streaming = false;
                 }
             }
-            usleep(500000);
+            if (siapNgebut>5){
+                usleep(50000);
+                siapNgebut=7;
+            }else{
+                 usleep(1000000);
+            }
+            
         }
     }
 
@@ -823,16 +840,17 @@ private:
     bool get_data=false;
     
     int client2_data_count = 0;
-    const int max_client2_data_count = 1;
+    const int max_client2_data_count = 3;
 };
 
 int main()
 {
+    broadcast_server server_instance;
+
     try
     {   
         cam1.init();
         usleep(5000000);
-        broadcast_server server_instance;
         
         // Start a thread to run the processing loop
 
