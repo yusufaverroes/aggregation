@@ -234,17 +234,29 @@ public:
         else
         {
             printf("Enum Devices succeed!\r\n");
+            
         }
-        nRet = MV_CODEREADER_CreateHandle(&handle, stDeviceList.pDeviceInfo[0]);
+        nRet = MV_CODEREADER_CreateHandleBySerialNumber(&handle, "02J87632631");
         if (MV_CODEREADER_OK != nRet)
         {
             printf("Create Handle fail! nRet [%#x]\r\n", nRet);
-            return 0;
+            return nRet;
         }
         else
         {
             printf("Create Handle succeed!\r\n");
         }
+        // nRet = MV_CODEREADER_CreateHandle(&handle, stDeviceList.pDeviceInfo[0]);
+        // if (MV_CODEREADER_OK != nRet)
+        // {
+        //     printf("Create Handle fail! nRet [%#x]\r\n", nRet);
+        //     return 0;
+        // }
+        // else
+        // {
+        //     printf("Create Handle succeed!\r\n");
+        // }
+
 
         // ch:打开设备 | Open device
         nRet = MV_CODEREADER_OpenDevice(handle);
@@ -441,9 +453,13 @@ public:
                     printf("Memory allocation failed!\n");
                     continue; // Skip to the next iteration
                 }
-
+                int center_x = (stBcrResult->stBcrInfoEx[i].pt[0].x + stBcrResult->stBcrInfoEx[i].pt[1].x +
+                                   stBcrResult->stBcrInfoEx[i].pt[2].x + stBcrResult->stBcrInfoEx[i].pt[3].x) /4;
+                                 
+                int center_y = (stBcrResult->stBcrInfoEx[i].pt[0].y + stBcrResult->stBcrInfoEx[i].pt[1].y +
+                                   stBcrResult->stBcrInfoEx[i].pt[2].y + stBcrResult->stBcrInfoEx[i].pt[3].y) /4;
                 // Format the output string
-                int result = snprintf(output_string, MAX_BCR_LEN, "%s:%d;", strChar, stBcrResult->stBcrInfoEx->nIDRScore);
+                int result = snprintf(output_string, MAX_BCR_LEN, "%s:%d:%d:%d;", strChar, stBcrResult->stBcrInfoEx->nIDRScore, center_x,center_y);
                 // Check if the formatting was successful and the string wasn't truncated
                 if (result < 0 || result >= MAX_BCR_LEN)
                 {
