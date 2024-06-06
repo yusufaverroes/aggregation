@@ -220,6 +220,7 @@ private:
     }
 
 public:
+    int scannedNum=0;
     int init()
     {
         MV_CODEREADER_DEVICE_INFO_LIST stDeviceList;
@@ -410,7 +411,8 @@ public:
                 // Draw the polygon
                 cv::polylines(scaledImage, points, true, cv::Scalar(255, 255, 0), 2);
             }
-
+            scannedNum= stBcrResult->nCodeNum;
+            
             // //pthread_mutex_unlock(&mutex);
         }
         return scaledImage;
@@ -702,6 +704,7 @@ public:
                                 imencode(".jpeg", cam1.getImage(), buf);
                                 // m_server.send(b->hdl, "a", websocketpp::frame::opcode::text);
                                 m_server.send(it->first, buf.data(), buf.size(), websocketpp::frame::opcode::binary);
+                                m_server.send(it->first, std::to_string(cam1.scannedNum), websocketpp::frame::opcode::text);
                                 // m_server.send(it->first, "a", websocketpp::frame::opcode::text);
                             }
                             catch (std::exception const &e)
