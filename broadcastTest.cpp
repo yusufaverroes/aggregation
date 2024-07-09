@@ -1,3 +1,7 @@
+#include <thread>
+#include <csignal>
+#include <unistd.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,6 +43,7 @@ class Camera
 private:
     int nRet = MV_CODEREADER_OK;
     void *handle = NULL;
+    
     bool bIsNormalRun = true;
     bool g_bExit = false;
 
@@ -72,6 +77,7 @@ private:
         MV_CODEREADER_IMAGE_OUT_INFO_EX2 *g_pstImageInfoEx2;
         unsigned char *g_pcDataBuf;
     };
+    
 
     int GB2312ToUTF8(char *szSrc, size_t iSrcLen, char *szDst, size_t iDstLen)
     {
@@ -209,7 +215,9 @@ private:
             memset(g_pstImageInfoEx2, 0, sizeof(MV_CODEREADER_IMAGE_OUT_INFO_EX2));
 
             pthread_mutex_init(&mutex, NULL);
+            
         }
+
         catch (...)
         {
             DeInitResources();
@@ -221,6 +229,16 @@ private:
 
 public:
     int scannedNum=0;
+
+
+    static void __stdcall exceptionCallBack(unsigned int nMsgType, void* pUser) {
+
+        int* userData = static_cast<int*>(pUser);
+        
+        // Access and process the event information
+        std::cout << "Received event type: " << nMsgType<< std::endl;
+        std::cout << "User data passed: " << *userData << std::endl;
+    }
     int init()
     {
         MV_CODEREADER_DEVICE_INFO_LIST stDeviceList;
@@ -241,7 +259,7 @@ public:
         if (MV_CODEREADER_OK != nRet)
         {
             printf("Create Handle fail! nRet [%#x]\r\n", nRet);
-            return nRet;
+            return 0;
         }
         else
         {
@@ -264,6 +282,7 @@ public:
         if (MV_CODEREADER_OK != nRet)
         {
             printf("Open Device fail! nRet [%#x]\r\n", nRet);
+            return 0;
         }
         else
         {
@@ -302,7 +321,20 @@ public:
         {
             printf("Start Grabbing succeed!\r\n");
         }
-        return 1;
+        
+        int pUser = 0;
+        nRet = MV_CODEREADER_RegisterExceptionCallBack(handle, exceptionCallBack, &pUser);
+         if (MV_CODEREADER_OK != nRet)
+        {
+            printf("Assigning exception callback fail! nRet [%#x]\r\n", nRet);
+            return 0;
+        }
+        else
+        {
+            printf("Assigning exception callback succeed!\r\n");
+            return 1;
+        }
+
     }
     int DeInitResources()
     {
@@ -478,14 +510,15 @@ public:
         }
         else
         {
-            printf("failed");
+            printf("grabbing string is failed");
+            return 0;
         }
         // Allocate memory for the result_string
         result_string = (char *)malloc((total_length + 1) * sizeof(char));
         if (result_string == NULL)
         {
             printf("Memory allocation failed for result string!\n");
-            return NULL;
+            return 0;
         }
 
         // Copy the content of temp_string to result_string
@@ -509,6 +542,8 @@ public:
 #include <websocketpp/common/thread.hpp>
 
 typedef websocketpp::server<websocketpp::config::asio> server;
+typedef websocketpp::connection_hdl connection_hdl;
+
 
 using websocketpp::connection_hdl;
 using websocketpp::lib::bind;
@@ -543,11 +578,9 @@ struct action
     server::message_ptr msg;
 };
 Camera cam1;
-class broadcast_server
-{
+class broadcast_server {
 public:
-    broadcast_server()
-    {
+    broadcast_server() {
         // Initialize Asio Transport
         m_server.init_asio();
 
@@ -555,40 +588,46 @@ public:
         m_server.set_open_handler(bind(&broadcast_server::on_open, this, ::_1));
         m_server.set_close_handler(bind(&broadcast_server::on_close, this, ::_1));
         m_server.set_message_handler(bind(&broadcast_server::on_message, this, ::_1, std::placeholders::_2));
+        
     }
+   
 
-    void run(uint16_t port)
-    {
-        // listen on specified port
+    void run(uint16_t port) {
+        // Listen on specified port
         m_server.listen(port);
 
         // Start the server accept loop
         m_server.start_accept();
 
         // Start the ASIO io_service run loop
-        try
-        {
+        try {
             m_server.run();
-        }
-        catch (const std::exception &e)
-        {
+        } catch (const std::exception &e) {
             std::cout << e.what() << std::endl;
         }
     }
 
-    void on_open(connection_hdl hdl)
-    {
+    void stop() {
+        std::lock_guard<std::mutex> guard(m_action_lock);
+        should_exit = true;
+        m_action_cond.notify_all();
+        m_server.stop_listening();
+        for (auto hdl : m_connections) {
+            m_server.close(hdl.first, websocketpp::close::status::going_away, "");
+        }
+    }
+
+
+
+    void on_open(connection_hdl hdl) {
         server::connection_ptr con = m_server.get_con_from_hdl(hdl);
         std::string client_id = con->get_request_header("Client-ID");
 
         {
-            lock_guard<mutex> guard(m_action_lock);
-            if (client_id.length() > 0)
-            {
+            std::lock_guard<std::mutex> guard(m_action_lock);
+            if (client_id.length() > 0) {
                 m_connections[hdl] = client_id; // Associate the client's connection handle with the provided unique identifier
-            }
-            else
-            {
+            } else {
                 m_connections[hdl] = "client1";
             }
             std::cout << "Client connected with ID: " << client_id << std::endl;
@@ -597,15 +636,10 @@ public:
         m_action_cond.notify_one();
     }
 
-    void on_close(connection_hdl hdl)
-    {
-        {
-
-            lock_guard<mutex> guard(m_action_lock);
-            m_connections.erase(hdl);
-            std::cout << "Client disconnected, connection id : " << m_connections[hdl] << std::endl;
-        }
-
+    void on_close(connection_hdl hdl) {
+        std::lock_guard<std::mutex> guard(m_action_lock);
+        std::cout << "Client disconnected, connection id: " << m_connections[hdl] << std::endl;
+        m_connections.erase(hdl);
         m_action_cond.notify_one();
     }
 
@@ -619,119 +653,43 @@ public:
         }
         m_action_cond.notify_one();
     }
-    // void looping(){
-    //         while(1){
-    //         // if (!stop_streaming)
-    //         // {
-    //             // if (b!=NULL && !b->hdl.expired()){
-    //                 if (b!=NULL ){
-    //                 con_list::iterator it = m_connections.find(b->hdl);
 
-    //                 if (it != m_connections.end())
-    //                 {
-    //                     std::string client_id = it->second;
-    //                     // if (client_id == "client1" && streaming_to_client1)
-    //                     if (stop_streaming==false && get_data==false)
-    //                     {
-    //                         // cv::imshow("test",cam1.getImage());
-    //                         // cv::waitKey(0);
-    //                         std::vector<unsigned char> buf;
-    //                         imencode(".jpeg", cam1.getImage(), buf);
-    //                         // m_server.send(b->hdl, "a", websocketpp::frame::opcode::text);
-    //                         m_server.send(b->hdl,  buf.data(), buf.size(), websocketpp::frame::opcode::binary);
-    //                     }
-    //                     else if (get_data==true){
-    //                             if (client2_data_count < max_client2_data_count){
-    //                             m_server.send(b->hdl, cam1.getString(), websocketpp::frame::opcode::text);
-    //                             client2_data_count++;
-    //                             }else{
-    //                                 stop_streaming=false;
-    //                                 get_data=false;
-    //                                 client2_data_count=0;
-    //                             }
 
-    //                     }
-    //                     // else if (client_id == "client2" && streaming_to_client2)
-    //                     // {
-    //                     //     if (client2_data_count < max_client2_data_count)
-    //                     //     {
-    //                     //         //get string data here
-    //                     //         // m_server.send(b->hdl, "b", websocketpp::frame::opcode::text);
-    //                     //         m_server.send(b->hdl, cam1.getString(), websocketpp::frame::opcode::text);
-    //                     //         client2_data_count++;
-    //                     //     }
-    //                     //     else
-    //                     //     {
-    //                     //         streaming_to_client2 = false;
-    //                     //         streaming_to_client1 = true;
-    //                     //     }
-    //                     // }
-    //                 }
-    //             // }
-    //             // else
-    //             // {
-    //             //     streaming_to_client1 = false;
-    //             //     streaming_to_client2 = false;
-    //             //     stop_streaming = false;
-    //             // }
-    //         }
-    //         //Rey delay
-    //         //usleep(1000000);
-    //         //Rizal Delay
-    //         usleep(100000);
-    //     }
-    // }
-
-    void looping()
-    {
+    void looping() {
         int siapNgebut = 0;
-        while (1)
-        {
-            if (!stop_streaming)
-            {
-                if (m_connections.size() > 0)
-                {
-
-                    for (auto it = m_connections.begin(); it != m_connections.end(); ++it)
-                    {
+        while (!should_exit) {
+            if (!stop_streaming) {
+                if (m_connections.size() > 0) {
+                    for (auto it = m_connections.begin(); it != m_connections.end(); ++it) {
                         std::string client_id = it->second;
-                        if (client_id == "client1" && streaming_to_client1)
-                        { // get image data here
+                        if (client_id == "client1" && streaming_to_client1) { // get image data here
                             siapNgebut++;
-                            try
-                            {
+                            try {
                                 std::vector<unsigned char> buf;
                                 imencode(".jpeg", cam1.getImage(), buf);
-                                // m_server.send(b->hdl, "a", websocketpp::frame::opcode::text);
                                 m_server.send(it->first, buf.data(), buf.size(), websocketpp::frame::opcode::binary);
                                 m_server.send(it->first, std::to_string(cam1.scannedNum), websocketpp::frame::opcode::text);
-                                // m_server.send(it->first, "a", websocketpp::frame::opcode::text);
+                            } catch (std::exception const &e) {
+                                std::cout << "Error on grabbing image or sending data: " << e.what() << std::endl;
                             }
-                            catch (std::exception const &e)
-                            {
-                                std::cout<<"Error on grabbing image or sending data: "<<e.what()<<std::endl;
-                            }
-                        }
-                        else if (client_id == "client2" && streaming_to_client2)
-                        {
-                            if (client2_data_count < max_client2_data_count)
-                            {
-                                // get string data here
-                                try
-                                {
-                                    m_server.send(it->first, cam1.getString(), websocketpp::frame::opcode::text);
-                                    std::cout << "success sending strings" << std::endl;
-                                }
-                                catch (std::exception const &e)
-                                {
+                        } else if (client_id == "client2" && streaming_to_client2) {
+                            if (get_status == true) {
+                                try {
+                                    m_server.send(it->first, "Ok", websocketpp::frame::opcode::text);
+                                    std::cout << "success sending status" << std::endl;
+                                    get_status = false;
+                                } catch (std::exception const &e) {
                                     std::cout << "error on getting or sending string : " << e.what() << std::endl;
                                 }
-
-                                // m_server.send(it->first, "b", websocketpp::frame::opcode::text);
+                            } else if (client2_data_count < max_client2_data_count) {
+                                try {
+                                    m_server.send(it->first, cam1.getString(), websocketpp::frame::opcode::text);
+                                    std::cout << "success sending strings" << std::endl;
+                                } catch (std::exception const &e) {
+                                    std::cout << "error on getting or sending string : " << e.what() << std::endl;
+                                }
                                 client2_data_count++;
-                            }
-                            else
-                            {
+                            } else {
                                 streaming_to_client2 = false;
                                 streaming_to_client1 = true;
                                 client2_data_count = 0;
@@ -739,118 +697,55 @@ public:
                         }
                     }
                 }
-                else
-                {
-                    // streaming_to_client1 = false;
-                    // streaming_to_client2 = false;
-                    // stop_streaming = false;
-                }
             }
-            if (siapNgebut > 5) //TODO : use better logic
-            {
+            if (siapNgebut > 5) { //TODO: use better logic
                 usleep(50000);
                 siapNgebut = 7;
-            }
-            else
-            {
+            } else {
                 usleep(100);
             }
         }
+        std::cout << "Exiting looping function..." << std::endl;
     }
 
-    void process_messages()
-    {
-        while (1)
-        {
 
-            unique_lock<mutex> lock(m_action_lock);
+    void process_messages() {
+        while (!should_exit) {
+            std::unique_lock<std::mutex> lock(m_action_lock);
+            m_action_cond.wait(lock, [this] { return !m_actions.empty() || should_exit; });
 
-            while (m_actions.empty())
-            {
-                m_action_cond.wait(lock);
+            if (should_exit && m_actions.empty()) {
+                break;
             }
 
             action a = m_actions.front();
-
             m_actions.pop();
-            b = &a;
             lock.unlock();
 
-            if (a.type == SUBSCRIBE)
-            {
+            if (a.type == SUBSCRIBE) {
                 // Handle client subscription
-            }
-            else if (a.type == UNSUBSCRIBE)
-            {
+            } else if (a.type == UNSUBSCRIBE) {
                 // Handle client unsubscription
-            }
-            else if (a.type == MESSAGE)
-            {
+            } else if (a.type == MESSAGE) {
                 std::string message = a.msg->get_payload();
 
-                // if (message == "stop_streaming")
-                // {
-                //     stop_streaming = true;
-                // }
-                // else if (message=="start_stream")
-                // {
-                //     // streaming_to_client1 = false;
-                //     // streaming_to_client2 = true;
-                //     // client2_data_count = 0;
-                //     stop_streaming = false;
-                // }else if(message=="get_data"){
-                //     stop_streaming = true;
-                //     get_data=true;
-                // }
-                if (message == "stop_streaming")
-                {
+                if (message == "stop_streaming") {
                     stop_streaming = true;
-                }
-                else if (message == "get_data")
-                {
+                } else if (message == "get_data") {
                     streaming_to_client1 = false;
                     streaming_to_client2 = true;
                     client2_data_count = 0;
-                }
-                else if (message == "start_streaming")
-                {
+                } else if (message == "start_streaming") {
                     stop_streaming = false;
                     streaming_to_client1 = true;
+                } else if (message == "get_status") {
+                    streaming_to_client1 = false;
+                    streaming_to_client2 = true;
+                    get_status = true;
                 }
             }
-
-            // if (!stop_streaming) // TODO : spllit into another thread from here, to make looping
-            // {
-            //     con_list::iterator it = m_connections.find(a.hdl);
-            //     if (it != m_connections.end())
-            //     {
-            //         std::string client_id = it->second;
-            //         if (client_id == "client1" && streaming_to_client1)
-            //         {
-            //             m_server.send(a.hdl, "a", websocketpp::frame::opcode::text);
-            //         }
-            //         else if (client_id == "client2" && streaming_to_client2)
-            //         {
-            //             if (client2_data_count < max_client2_data_count)
-            //             {
-            //                 m_server.send(a.hdl, "b", websocketpp::frame::opcode::text);
-            //                 client2_data_count++;
-            //             }
-            //             else
-            //             {
-            //                 streaming_to_client2 = false;
-            //                 streaming_to_client1 = true;
-            //             }
-            //         }
-            //     }
-            // }
-            // else
-            // {
-            //     streaming_to_client1 = false;
-            //     streaming_to_client2 = false;
-            //     stop_streaming = false;
-            // }
         }
+        std::cout << "Exiting process_messages function..." << std::endl;
     }
 
 private:
@@ -869,39 +764,118 @@ private:
     bool streaming_to_client2 = false;
     bool stop_streaming = false;
     bool get_data = false;
+    bool get_status = false;
 
     int client2_data_count = 0;
     const int max_client2_data_count = 3;
+
+     std::atomic<bool> should_exit{false};
 };
 
-int main()
-{
-    broadcast_server server_instance;
+// Global variables to allow access in signal handler
+broadcast_server* g_server_instance = nullptr;
+std::thread t, l;
 
-    try
-    {
-        cam1.init();
-        usleep(5000000);
+void signal_handler(int signal) {
+    std::cout << "Signal handler called with signal: " << signal << std::endl;
+    if (g_server_instance) {
+        std::cout << "Stopping server instance..." << std::endl;
+        g_server_instance->stop();
+    }
+    if (t.joinable()) {
+        std::cout << "Joining thread t..." << std::endl;
+        t.join();
+    }
+    if (l.joinable()) {
+        std::cout << "Joining thread l..." << std::endl;
+        l.join();
+    }
+    std::cout << "Deinitializing resources in camera handler..." << std::endl;
+    cam1.DeInitResources();
+    exit(signal);
+}
 
-        // Start a thread to run the processing loop
+class Cleanup {
+public:
+    ~Cleanup() {
+        std::cout << "Cleanup destructor called" << std::endl;
+        if (g_server_instance) {
+            std::cout << "Stopping server instance..." << std::endl;
+            g_server_instance->stop();
+        }
+        if (t.joinable()) {
+            std::cout << "Joining thread t..." << std::endl;
+            t.join();
+        }
+        if (l.joinable()) {
+            std::cout << "Joining thread l..." << std::endl;
+            l.join();
+        }
+        std::cout << "Deinitializing resources..." << std::endl;
+        cam1.DeInitResources();
+    }
+};
 
-        thread t(bind(&broadcast_server::process_messages, &server_instance));
-        thread l(bind(&broadcast_server::looping, &server_instance));
+
+int main() {
+    try {
+        std::cout << "Initializing camera..." << std::endl;
+        int camInitRetires = 0;
+        int maxCamInitRetires = 3;
+        while (cam1.init()==0){
+            camInitRetires++;
+            
+            if (camInitRetires>maxCamInitRetires){
+                cam1.DeInitResources();
+                std::cout << "Initializing camera is failed, exiting the program..." << std::endl;
+                return 0;
+            }
+            cam1.DeInitResources();
+            std::cout << "Retrying to initialize camera in 5s...(" << camInitRetires<<"/"<<maxCamInitRetires<<")"<<std::endl;
+            usleep(5000000);
+        }
+        
+        
+        std::cout << "Creating server instance..." << std::endl;
+        usleep(1000000);
+        broadcast_server server_instance;
+        g_server_instance = &server_instance;
+
+        // Register signal handler
+        std::cout << "Registering signal handlers..." << std::endl;
+        signal(SIGINT, signal_handler);
+        signal(SIGTERM, signal_handler);
+
+        // Create a Cleanup object to ensure resources are released properly
+        std::cout << "Creating Cleanup object..." << std::endl;
+        Cleanup cleanup;
+
+        // Start threads for processing loop
+        std::cout << "Starting processing threads..." << std::endl;
+        t = std::thread(&broadcast_server::process_messages, &server_instance);
+        l = std::thread(&broadcast_server::looping, &server_instance);
 
         // Run the ASIO io_service with the main thread
+        std::cout << "Running server instance on port 9002..." << std::endl;
         server_instance.run(9002);
-        std::cout << "server run" << std::endl;
 
-        // Wait for the processing thread to finish
+        // Wait for the processing threads to finish
+        std::cout << "Joining threads..." << std::endl;
         t.join();
         l.join();
+        
+        // std::cout << "Deinitializing camera resources..." << std::endl;
+        // cam1.DeInitResources();
+    } catch (websocketpp::exception const &e) {
+        std::cout << "Exception caught: " << e.what() << std::endl;
+        if (g_server_instance) {
+            std::cout << "Stopping server instance due to exception..." << std::endl;
+            g_server_instance->stop();
+        }
         cam1.DeInitResources();
     }
-    catch (websocketpp::exception const &e)
-    {
-        std::cout << e.what() << std::endl;
-        cam1.DeInitResources();
-    }
+
+    std::cout << "Main function end, deinitializing resources..." << std::endl;
     cam1.DeInitResources();
     return 0;
 }
