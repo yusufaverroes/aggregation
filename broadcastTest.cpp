@@ -46,6 +46,7 @@ private:
     
     bool bIsNormalRun = true;
     bool g_bExit = false;
+    
 
     unsigned int g_nMaxImageSize = 0;
     MV_CODEREADER_IMAGE_OUT_INFO_EX2 *g_pstImageInfoEx2;
@@ -226,18 +227,32 @@ private:
 
         return nRet;
     }
-
+bool deviceIsConnected;
 public:
     int scannedNum=0;
-
-
+    Camera() : deviceIsConnected(true) {};
     static void __stdcall exceptionCallBack(unsigned int nMsgType, void* pUser) {
 
-        int* userData = static_cast<int*>(pUser);
         
+        Camera* camera = static_cast<Camera*>(pUser);
+        camera->HandleException(nMsgType);
         // Access and process the event information
-        std::cout << "Received event type: " << nMsgType<< std::endl;
-        std::cout << "User data passed: " << *userData << std::endl;
+        // std::cout << "Received event type: " << nMsgType<< std::endl;
+        // std::cout << "User data passed: " << *userData << std::endl;
+    }
+        void HandleException(unsigned int nMsgType) {
+        if (MV_CODEREADER_EXCEPTION_DEV_DISCONNECT == nMsgType) {
+            deviceIsConnected = false;
+        }
+        // Access and process the event information
+        // std::cout << "Received event type: " << nMsgType << std::endl;
+    }
+    
+    bool getStatus(){
+       return deviceIsConnected;
+    }
+    void setStatus(bool status){
+        deviceIsConnected = status;
     }
     int init()
     {
@@ -322,8 +337,8 @@ public:
             printf("Start Grabbing succeed!\r\n");
         }
         
-        int pUser = 0;
-        nRet = MV_CODEREADER_RegisterExceptionCallBack(handle, exceptionCallBack, &pUser);
+        // int pUser = 0;
+        nRet = MV_CODEREADER_RegisterExceptionCallBack(handle, exceptionCallBack, this);
          if (MV_CODEREADER_OK != nRet)
         {
             printf("Assigning exception callback fail! nRet [%#x]\r\n", nRet);
@@ -332,6 +347,7 @@ public:
         else
         {
             printf("Assigning exception callback succeed!\r\n");
+            setStatus(true);
             return 1;
         }
 
@@ -658,11 +674,37 @@ public:
     void looping() {
         int siapNgebut = 0;
         while (!should_exit) {
-            if (!stop_streaming) {
+            if (!cam1.getStatus()&& !retryingToConnectToCam)   {
+                // Create a new thread to handle the task
+                retryingToConnectToCam=true;
+                std::thread([this]() {
+                            std::cout << "Initializing camera..." << std::endl;
+                            int camInitRetires = 0;
+                            int maxCamInitRetires = 100;
+                            cam1.DeInitResources();
+                            while (cam1.init()==0){
+                                camInitRetires++;
+                                
+                                if (camInitRetires>maxCamInitRetires){
+                                    cam1.DeInitResources();
+                                    std::cout << "Initializing camera is failed, exiting the program..." << std::endl;
+                                    should_exit=true;
+                                    retryingToConnectToCam=false;
+                                    return;
+                                }
+                                cam1.DeInitResources();
+                                std::cout << "Retrying to initialize camera in 5s...(" << camInitRetires<<"/"<<maxCamInitRetires<<")"<<std::endl;
+                                usleep(5000000);
+                            }
+                            retryingToConnectToCam=false;
+                            std::cout << "Camera is now connected ." << std::endl;
+                        }).detach();
+                    }
+            // if (!stop_streaming) {
                 if (m_connections.size() > 0) {
                     for (auto it = m_connections.begin(); it != m_connections.end(); ++it) {
                         std::string client_id = it->second;
-                        if (client_id == "client1" && streaming_to_client1) { // get image data here
+                        if (client_id == "client1" && !stop_streaming) { // get image data here
                             siapNgebut++;
                             try {
                                 std::vector<unsigned char> buf;
@@ -672,16 +714,8 @@ public:
                             } catch (std::exception const &e) {
                                 std::cout << "Error on grabbing image or sending data: " << e.what() << std::endl;
                             }
-                        } else if (client_id == "client2" && streaming_to_client2) {
-                            if (get_status == true) {
-                                try {
-                                    m_server.send(it->first, "Ok", websocketpp::frame::opcode::text);
-                                    std::cout << "success sending status" << std::endl;
-                                    get_status = false;
-                                } catch (std::exception const &e) {
-                                    std::cout << "error on getting or sending string : " << e.what() << std::endl;
-                                }
-                            } else if (client2_data_count < max_client2_data_count) {
+                        } else if (client_id == "client2" && get_data) {
+                            if (client2_data_count < max_client2_data_count) {
                                 try {
                                     m_server.send(it->first, cam1.getString(), websocketpp::frame::opcode::text);
                                     std::cout << "success sending strings" << std::endl;
@@ -690,14 +724,28 @@ public:
                                 }
                                 client2_data_count++;
                             } else {
-                                streaming_to_client2 = false;
-                                streaming_to_client1 = true;
+                                // streaming_to_client2 = false;
+                                // streaming_to_client1 = true;
+                                get_data=false;
                                 client2_data_count = 0;
                             }
+                        } else if (client_id == "client3" && get_status){
+                                try {
+                                    if(cam1.getStatus()){
+                                        m_server.send(it->first, "Ok", websocketpp::frame::opcode::text);    
+                                    }else{
+                                        m_server.send(it->first, "Disconnected", websocketpp::frame::opcode::text);
+                                    }
+                                    ;
+                                    std::cout << "success sending status" << std::endl;
+                                    get_status = false;
+                                } catch (std::exception const &e) {
+                                    std::cout << "error on getting or sending string : " << e.what() << std::endl;
+                                }
                         }
                     }
                 }
-            }
+            // }
             if (siapNgebut > 5) { //TODO: use better logic
                 usleep(50000);
                 siapNgebut = 7;
@@ -732,15 +780,18 @@ public:
                 if (message == "stop_streaming") {
                     stop_streaming = true;
                 } else if (message == "get_data") {
-                    streaming_to_client1 = false;
-                    streaming_to_client2 = true;
+                    // streaming_to_client1 = false;
+                    // streaming_to_client2 = true;
+                    // streaming_to_client3 =
+                    get_data=true;
                     client2_data_count = 0;
                 } else if (message == "start_streaming") {
                     stop_streaming = false;
-                    streaming_to_client1 = true;
+                    // streaming_to_client1 = true;
                 } else if (message == "get_status") {
-                    streaming_to_client1 = false;
-                    streaming_to_client2 = true;
+                    // streaming_to_client1 = false;
+                    // streaming_to_client2 = true;
+
                     get_status = true;
                 }
             }
@@ -760,16 +811,17 @@ private:
     condition_variable m_action_cond;
     action *b;
 
-    bool streaming_to_client1 = true;
-    bool streaming_to_client2 = false;
+    // bool streaming_to_client1 = true;
+    // bool streaming_to_client2 = false;
+    // bool streaming_to_client3 = false;
     bool stop_streaming = false;
     bool get_data = false;
-    bool get_status = false;
-
+    bool get_status = true;
     int client2_data_count = 0;
     const int max_client2_data_count = 3;
 
-     std::atomic<bool> should_exit{false};
+    std::atomic<bool> should_exit{false};
+    std::atomic<bool> retryingToConnectToCam{false};
 };
 
 // Global variables to allow access in signal handler
