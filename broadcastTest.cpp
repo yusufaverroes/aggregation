@@ -475,7 +475,7 @@ public:
         MV_CODEREADER_IMAGE_OUT_INFO_EX2 stImageInfo = {0};
         memset(&stImageInfo, 0, sizeof(MV_CODEREADER_IMAGE_OUT_INFO_EX));
         unsigned char *pData = NULL;
-
+        float scaleddown = 0.2;
         nnRet = MV_CODEREADER_GetOneFrameTimeoutEx2(handle, &pData, &stImageInfo, 1000);
         if (nnRet == MV_CODEREADER_OK)
         {
@@ -503,11 +503,11 @@ public:
                     printf("Memory allocation failed!\n");
                     continue; // Skip to the next iteration
                 }
-                int center_x = (stBcrResult->stBcrInfoEx[i].pt[0].x + stBcrResult->stBcrInfoEx[i].pt[1].x +
-                                   stBcrResult->stBcrInfoEx[i].pt[2].x + stBcrResult->stBcrInfoEx[i].pt[3].x) /4;
+                int center_x = ((stBcrResult->stBcrInfoEx[i].pt[0].x + stBcrResult->stBcrInfoEx[i].pt[1].x +
+                                   stBcrResult->stBcrInfoEx[i].pt[2].x + stBcrResult->stBcrInfoEx[i].pt[3].x)*scaleddown) /4;
                                  
-                int center_y = (stBcrResult->stBcrInfoEx[i].pt[0].y + stBcrResult->stBcrInfoEx[i].pt[1].y +
-                                   stBcrResult->stBcrInfoEx[i].pt[2].y + stBcrResult->stBcrInfoEx[i].pt[3].y) /4;
+                int center_y = ((stBcrResult->stBcrInfoEx[i].pt[0].y + stBcrResult->stBcrInfoEx[i].pt[1].y +
+                                   stBcrResult->stBcrInfoEx[i].pt[2].y + stBcrResult->stBcrInfoEx[i].pt[3].y)*scaleddown) /4;
                 // Format the output string
                 int result = snprintf(output_string, MAX_BCR_LEN, "%s:%d:%d:%d;", strChar, stBcrResult->stBcrInfoEx->nIDRScore, center_x,center_y);
                 // Check if the formatting was successful and the string wasn't truncated
