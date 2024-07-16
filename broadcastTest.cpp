@@ -636,7 +636,8 @@ public:
 
 
     void on_open(connection_hdl hdl) {
-        server::connection_ptr con = m_server.get_con_from_hdl(hdl);
+        try{
+            server::connection_ptr con = m_server.get_con_from_hdl(hdl);
         std::string client_id = con->get_request_header("Client-ID");
 
         {
@@ -650,13 +651,23 @@ public:
         }
 
         m_action_cond.notify_one();
+
+        }catch (websocketpp::exception const &e) {
+        std::cout << "Exception caught: " << e.what() << std::endl;
+        }
+        
     }
 
     void on_close(connection_hdl hdl) {
-        std::lock_guard<std::mutex> guard(m_action_lock);
-        std::cout << "Client disconnected, connection id: " << m_connections[hdl] << std::endl;
-        m_connections.erase(hdl);
-        m_action_cond.notify_one();
+        try{
+            std::lock_guard<std::mutex> guard(m_action_lock);
+            std::cout << "Client disconnected, connection id: " << m_connections[hdl] << std::endl;
+            m_connections.erase(hdl);
+            m_action_cond.notify_one();
+        }catch (websocketpp::exception const &e) {
+        std::cout << "Exception caught: " << e.what() << std::endl;
+        }
+        
     }
 
     void on_message(connection_hdl hdl, server::message_ptr msg)
@@ -675,6 +686,7 @@ public:
         int siapNgebut = 0;
         while (!should_exit) {
             if (!cam1.getStatus()&& !retryingToConnectToCam)   {
+                std::lock_guard<std::mutex> guard(m_action_lock);
                 // Create a new thread to handle the task
                 retryingToConnectToCam=true;
                 std::thread([this]() {
@@ -701,6 +713,7 @@ public:
                         }).detach();
                     }
             // if (!stop_streaming) {
+            try {
                 if (m_connections.size() > 0) {
                     for (auto it = m_connections.begin(); it != m_connections.end(); ++it) {
                         std::string client_id = it->second;
@@ -730,21 +743,24 @@ public:
                                 client2_data_count = 0;
                             }
                         } else if (client_id == "client3" && get_status){
-                                try {
-                                    if(cam1.getStatus()){
-                                        m_server.send(it->first, "Ok", websocketpp::frame::opcode::text);    
-                                    }else{
-                                        m_server.send(it->first, "Disconnected", websocketpp::frame::opcode::text);
-                                    }
-                                    ;
-                                    std::cout << "success sending status" << std::endl;
-                                    get_status = false;
-                                } catch (std::exception const &e) {
-                                    std::cout << "error on getting or sending string : " << e.what() << std::endl;
+                            try {
+                                if(cam1.getStatus()){
+                                    m_server.send(it->first, "Ok", websocketpp::frame::opcode::text);    
+                                }else{
+                                    m_server.send(it->first, "Disconnected", websocketpp::frame::opcode::text);
                                 }
+                                ;
+                                std::cout << "success sending status" << std::endl;
+                                get_status = false;
+                            } catch (std::exception const &e) {
+                                std::cout << "error on getting or sending string : " << e.what() << std::endl;
+                            }
                         }
                     }
                 }
+            } catch (std::exception const &e) {
+                std::cout << "Error on looping connection map " << e.what() << std::endl;
+            }
             // }
             if (siapNgebut > 5) { //TODO: use better logic
                 usleep(50000);
@@ -752,6 +768,9 @@ public:
             } else {
                 usleep(100);
             }
+
+        m_action_cond.notify_one();
+
         }
         std::cout << "Exiting looping function..." << std::endl;
     }
