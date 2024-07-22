@@ -742,6 +742,8 @@ public:
                                     std::cout << "success sending strings" << std::endl;
                                 } catch (std::exception const &e) {
                                     std::cout << "error on getting or sending string : " << e.what() << std::endl;
+                                    m_action_cond.notify_one();
+                                    goto restartLooping;
                                 }
                                 client2_data_count++;
                             } else {
@@ -762,12 +764,16 @@ public:
                                 get_status = false;
                             } catch (std::exception const &e) {
                                 std::cout << "error on getting or sending string : " << e.what() << std::endl;
+                                m_action_cond.notify_one();
+                                goto restartLooping;
                             }
                         }
                     }
                 }
             } catch (std::exception const &e) {
                 std::cout << "Error on looping connection map " << e.what() << std::endl;
+                m_action_cond.notify_one();
+                goto restartLooping;
             }
             // }
             if (siapNgebut > 5) { //TODO: use better logic
