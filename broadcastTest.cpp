@@ -683,10 +683,15 @@ public:
 
 
     void looping() {
+        restartLooping:
+
+        usleep(5000000);
+        std::cout << "start looping..." << std::endl;
+
         int siapNgebut = 0;
         while (!should_exit) {
             if (!cam1.getStatus()&& !retryingToConnectToCam)   {
-                std::lock_guard<std::mutex> guard(m_action_lock);
+                
                 // Create a new thread to handle the task
                 retryingToConnectToCam=true;
                 std::thread([this]() {
@@ -713,6 +718,7 @@ public:
                         }).detach();
                     }
             // if (!stop_streaming) {
+            std::lock_guard<std::mutex> guard(m_action_lock);
             try {
                 if (m_connections.size() > 0) {
                     for (auto it = m_connections.begin(); it != m_connections.end(); ++it) {
@@ -726,6 +732,8 @@ public:
                                 m_server.send(it->first, std::to_string(cam1.scannedNum), websocketpp::frame::opcode::text);
                             } catch (std::exception const &e) {
                                 std::cout << "Error on grabbing image or sending data: " << e.what() << std::endl;
+                                m_action_cond.notify_one();
+                                goto restartLooping;
                             }
                         } else if (client_id == "client2" && get_data) {
                             if (client2_data_count < max_client2_data_count) {
