@@ -593,29 +593,59 @@ struct action
     websocketpp::connection_hdl hdl;
     server::message_ptr msg;
 };
+// Camera cam1;
+#include <websocketpp/config/asio_no_tls.hpp>
+#include <websocketpp/server.hpp>
+#include <iostream>
+#include <map>
+#include <queue>
+#include <vector>
+#include <unistd.h>
+#include <websocketpp/common/thread.hpp>
+#include <opencv2/opencv.hpp> // If you need OpenCV
+
+typedef websocketpp::server<websocketpp::config::asio> server;
+typedef websocketpp::connection_hdl connection_hdl;
+
+using websocketpp::connection_hdl;
+using websocketpp::lib::bind;
+using websocketpp::lib::placeholders::_1;
+
+using websocketpp::lib::condition_variable;
+using websocketpp::lib::lock_guard;
+using websocketpp::lib::mutex;
+using websocketpp::lib::thread;
+using websocketpp::lib::unique_lock;
+
+// enum action_type {
+//     SUBSCRIBE,
+//     UNSUBSCRIBE,
+//     MESSAGE
+// };
+
+// struct action {
+//     action(action_type t, connection_hdl h) : type(t), hdl(h) {}
+//     action(action_type t, connection_hdl h, server::message_ptr m) : type(t), hdl(h), msg(m) {}
+
+//     action_type type;
+//     websocketpp::connection_hdl hdl;
+//     server::message_ptr msg;
+// };
+
 Camera cam1;
+
 class broadcast_server {
 public:
     broadcast_server() {
-        // Initialize Asio Transport
         m_server.init_asio();
-
-        // Register handler callbacks
         m_server.set_open_handler(bind(&broadcast_server::on_open, this, ::_1));
         m_server.set_close_handler(bind(&broadcast_server::on_close, this, ::_1));
         m_server.set_message_handler(bind(&broadcast_server::on_message, this, ::_1, std::placeholders::_2));
-        
     }
-   
 
     void run(uint16_t port) {
-        // Listen on specified port
         m_server.listen(port);
-
-        // Start the server accept loop
         m_server.start_accept();
-
-        // Start the ASIO io_service run loop
         try {
             m_server.run();
         } catch (const std::exception &e) {
@@ -628,167 +658,103 @@ public:
         should_exit = true;
         m_action_cond.notify_all();
         m_server.stop_listening();
-        for (auto hdl : m_connections) {
+        for (auto &hdl : m_connections) {
             m_server.close(hdl.first, websocketpp::close::status::going_away, "");
         }
     }
 
-
-
     void on_open(connection_hdl hdl) {
-        try{
+        try {
             server::connection_ptr con = m_server.get_con_from_hdl(hdl);
-        std::string client_id = con->get_request_header("Client-ID");
+            std::string client_id = con->get_request_header("Client-ID");
 
-        {
-            std::lock_guard<std::mutex> guard(m_action_lock);
-            if (client_id.length() > 0) {
-                m_connections[hdl] = client_id; // Associate the client's connection handle with the provided unique identifier
-            } else {
-                m_connections[hdl] = "client1";
+            {
+                std::lock_guard<std::mutex> guard(m_action_lock);
+                if (client_id.length() > 0) {
+                    m_connections[hdl] = client_id;
+                } else {
+                    m_connections[hdl] = "client1";
+                }
+                std::cout << "Client connected with ID: " << client_id << std::endl;
             }
-            std::cout << "Client connected with ID: " << client_id << std::endl;
-        }
 
-        m_action_cond.notify_one();
+            m_action_cond.notify_one();
 
-        }catch (websocketpp::exception const &e) {
-        std::cout << "Exception caught: " << e.what() << std::endl;
+            // Start a dedicated thread for the new client connection
+            client_threads.emplace_back(&broadcast_server::client_thread, this, hdl);
+
+        } catch (websocketpp::exception const &e) {
+            std::cout << "Exception caught: " << e.what() << std::endl;
         }
-        
     }
 
     void on_close(connection_hdl hdl) {
-        try{
+        try {
             std::lock_guard<std::mutex> guard(m_action_lock);
             std::cout << "Client disconnected, connection id: " << m_connections[hdl] << std::endl;
             m_connections.erase(hdl);
             m_action_cond.notify_one();
-        }catch (websocketpp::exception const &e) {
-        std::cout << "Exception caught: " << e.what() << std::endl;
+        } catch (websocketpp::exception const &e) {
+            std::cout << "Exception caught: " << e.what() << std::endl;
         }
-        
     }
 
-    void on_message(connection_hdl hdl, server::message_ptr msg)
-    {
-        // queue message up for sending by processing thread
+    void on_message(connection_hdl hdl, server::message_ptr msg) {
         {
             lock_guard<mutex> guard(m_action_lock);
-            // std::cout << "on_message" << std::endl;
             m_actions.push(action(MESSAGE, hdl, msg));
+            std::cout<<"incomming message : "<< msg<< std::endl;
         }
         m_action_cond.notify_one();
     }
 
+    void client_thread(connection_hdl hdl) {
+        std::string client_id = m_connections[hdl];
+        int client2_data_count = 0;
 
-    void looping() {
-        restartLooping:
-
-        usleep(5000000);
-        std::cout << "start looping..." << std::endl;
-
-        int siapNgebut = 0;
         while (!should_exit) {
-            if (!cam1.getStatus()&& !retryingToConnectToCam)   {
-                
-                // Create a new thread to handle the task
-                retryingToConnectToCam=true;
-                std::thread([this]() {
-                            std::cout << "Initializing camera..." << std::endl;
-                            int camInitRetires = 0;
-                            int maxCamInitRetires = 100;
-                            cam1.DeInitResources();
-                            while (cam1.init()==0){
-                                camInitRetires++;
-                                
-                                if (camInitRetires>maxCamInitRetires){
-                                    cam1.DeInitResources();
-                                    std::cout << "Initializing camera is failed, exiting the program..." << std::endl;
-                                    should_exit=true;
-                                    retryingToConnectToCam=false;
-                                    return;
-                                }
-                                cam1.DeInitResources();
-                                std::cout << "Retrying to initialize camera in 5s...(" << camInitRetires<<"/"<<maxCamInitRetires<<")"<<std::endl;
-                                usleep(5000000);
-                            }
-                            retryingToConnectToCam=false;
-                            std::cout << "Camera is now connected ." << std::endl;
-                        }).detach();
-                    }
-            // if (!stop_streaming) {
-            std::lock_guard<std::mutex> guard(m_action_lock);
-            try {
-                if (m_connections.size() > 0) {
-                    for (auto it = m_connections.begin(); it != m_connections.end(); ++it) {
-                        std::string client_id = it->second;
-                        if (client_id == "client1" && !stop_streaming) { // get image data here
-                            siapNgebut++;
-                            try {
-                                std::vector<unsigned char> buf;
-                                imencode(".jpeg", cam1.getImage(), buf);
-                                m_server.send(it->first, buf.data(), buf.size(), websocketpp::frame::opcode::binary);
-                                m_server.send(it->first, std::to_string(cam1.scannedNum), websocketpp::frame::opcode::text);
-                            } catch (std::exception const &e) {
-                                std::cout << "Error on grabbing image or sending data: " << e.what() << std::endl;
-                                m_action_cond.notify_one();
-                                goto restartLooping;
-                            }
-                        } else if (client_id == "client2" && get_data) {
-                            if (client2_data_count < max_client2_data_count) {
-                                try {
-                                    m_server.send(it->first, cam1.getString(), websocketpp::frame::opcode::text);
-                                    std::cout << "success sending strings" << std::endl;
-                                } catch (std::exception const &e) {
-                                    std::cout << "error on getting or sending string : " << e.what() << std::endl;
-                                    m_action_cond.notify_one();
-                                    goto restartLooping;
-                                }
-                                client2_data_count++;
-                            } else {
-                                // streaming_to_client2 = false;
-                                // streaming_to_client1 = true;
-                                get_data=false;
-                                client2_data_count = 0;
-                            }
-                        } else if (client_id == "client3" && get_status){
-                            try {
-                                if(cam1.getStatus()){
-                                    m_server.send(it->first, "Ok", websocketpp::frame::opcode::text);    
-                                }else{
-                                    m_server.send(it->first, "Disconnected", websocketpp::frame::opcode::text);
-                                }
-                                ;
-                                std::cout << "success sending status" << std::endl;
-                                get_status = false;
-                            } catch (std::exception const &e) {
-                                std::cout << "error on getting or sending string : " << e.what() << std::endl;
-                                m_action_cond.notify_one();
-                                goto restartLooping;
-                            }
-                        }
-                    }
+            if (client_id == "client1" && !stop_streaming) {
+                std::lock_guard<std::mutex> guard(m_action_lock);
+                try {
+                    std::vector<unsigned char> buf;
+                    imencode(".jpeg", cam1.getImage(), buf);
+                    m_server.send(hdl, buf.data(), buf.size(), websocketpp::frame::opcode::binary);
+                    m_server.send(hdl, std::to_string(cam1.scannedNum), websocketpp::frame::opcode::text);
+                } catch (std::exception const &e) {
+                    std::cout << "Error on grabbing image or sending data: " << e.what() << std::endl;
+                    break;
                 }
-            } catch (std::exception const &e) {
-                std::cout << "Error on looping connection map " << e.what() << std::endl;
-                m_action_cond.notify_one();
-                goto restartLooping;
+            } else if (client_id == "client2" && get_data) {
+                if (client2_data_count < max_client2_data_count) {
+                    try {
+                        m_server.send(hdl, cam1.getString(), websocketpp::frame::opcode::text);
+                        std::cout << "success sending strings" << std::endl;
+                    } catch (std::exception const &e) {
+                        std::cout << "error on getting or sending string : " << e.what() << std::endl;
+                        break;
+                    }
+                    client2_data_count++;
+                } else {
+                    get_data = false;
+                    client2_data_count = 0;
+                }
+            } else if (client_id == "client3" && get_status) {
+                try {
+                    if (cam1.getStatus()) {
+                        m_server.send(hdl, "Ok", websocketpp::frame::opcode::text);
+                    } else {
+                        m_server.send(hdl, "Disconnected", websocketpp::frame::opcode::text);
+                    }
+                    std::cout << "success sending status" << std::endl;
+                    get_status = false;
+                } catch (std::exception const &e) {
+                    std::cout << "error on getting or sending string : " << e.what() << std::endl;
+                    break;
+                }
             }
-            // }
-            if (siapNgebut > 5) { //TODO: use better logic
-                usleep(50000);
-                siapNgebut = 7;
-            } else {
-                usleep(100);
-            }
-
-        m_action_cond.notify_one();
-
+            usleep(100000);  // Adjust as necessary
         }
-        std::cout << "Exiting looping function..." << std::endl;
     }
-
 
     void process_messages() {
         while (!should_exit) {
@@ -813,53 +779,41 @@ public:
                 if (message == "stop_streaming") {
                     stop_streaming = true;
                 } else if (message == "get_data") {
-                    // streaming_to_client1 = false;
-                    // streaming_to_client2 = true;
-                    // streaming_to_client3 =
-                    get_data=true;
-                    client2_data_count = 0;
+                    get_data = true;
                 } else if (message == "start_streaming") {
                     stop_streaming = false;
-                    // streaming_to_client1 = true;
                 } else if (message == "get_status") {
-                    // streaming_to_client1 = false;
-                    // streaming_to_client2 = true;
-
                     get_status = true;
                 }
             }
         }
         std::cout << "Exiting process_messages function..." << std::endl;
     }
-
+   std::vector<std::thread> client_threads;
+       mutex m_action_lock;
 private:
     typedef std::map<connection_hdl, std::string, std::owner_less<connection_hdl>> con_list;
 
     server m_server;
     con_list m_connections;
     std::queue<action> m_actions;
+ 
 
-    mutex m_action_lock;
+
     mutex m_connection_lock;
     condition_variable m_action_cond;
-    action *b;
 
-    // bool streaming_to_client1 = true;
-    // bool streaming_to_client2 = false;
-    // bool streaming_to_client3 = false;
     bool stop_streaming = false;
     bool get_data = false;
     bool get_status = true;
-    int client2_data_count = 0;
     const int max_client2_data_count = 3;
 
     std::atomic<bool> should_exit{false};
-    std::atomic<bool> retryingToConnectToCam{false};
 };
 
 // Global variables to allow access in signal handler
 broadcast_server* g_server_instance = nullptr;
-std::thread t, l;
+std::thread tm;
 
 void signal_handler(int signal) {
     std::cout << "Signal handler called with signal: " << signal << std::endl;
@@ -867,60 +821,32 @@ void signal_handler(int signal) {
         std::cout << "Stopping server instance..." << std::endl;
         g_server_instance->stop();
     }
-    if (t.joinable()) {
-        std::cout << "Joining thread t..." << std::endl;
-        t.join();
-    }
-    if (l.joinable()) {
-        std::cout << "Joining thread l..." << std::endl;
-        l.join();
+    if (tm.joinable()) {
+        std::cout << "Joining thread tm..." << std::endl;
+        tm.join();
     }
     std::cout << "Deinitializing resources in camera handler..." << std::endl;
     cam1.DeInitResources();
     exit(signal);
 }
 
-class Cleanup {
-public:
-    ~Cleanup() {
-        std::cout << "Cleanup destructor called" << std::endl;
-        if (g_server_instance) {
-            std::cout << "Stopping server instance..." << std::endl;
-            g_server_instance->stop();
-        }
-        if (t.joinable()) {
-            std::cout << "Joining thread t..." << std::endl;
-            t.join();
-        }
-        if (l.joinable()) {
-            std::cout << "Joining thread l..." << std::endl;
-            l.join();
-        }
-        std::cout << "Deinitializing resources..." << std::endl;
-        cam1.DeInitResources();
-    }
-};
-
-
 int main() {
     try {
         std::cout << "Initializing camera..." << std::endl;
-        int camInitRetires = 0;
-        int maxCamInitRetires = 3;
-        while (cam1.init()==0){
-            camInitRetires++;
-            
-            if (camInitRetires>maxCamInitRetires){
+        int camInitRetries = 0;
+        int maxCamInitRetries = 3;
+        while (cam1.init() == 0) {
+            camInitRetries++;
+            if (camInitRetries > maxCamInitRetries) {
                 cam1.DeInitResources();
-                std::cout << "Initializing camera is failed, exiting the program..." << std::endl;
+                std::cout << "Initializing camera failed, exiting the program..." << std::endl;
                 return 0;
             }
             cam1.DeInitResources();
-            std::cout << "Retrying to initialize camera in 5s...(" << camInitRetires<<"/"<<maxCamInitRetires<<")"<<std::endl;
+            std::cout << "Retrying to initialize camera in 5s...(" << camInitRetries << "/" << maxCamInitRetries << ")" << std::endl;
             usleep(5000000);
         }
-        
-        
+
         std::cout << "Creating server instance..." << std::endl;
         usleep(1000000);
         broadcast_server server_instance;
@@ -931,26 +857,24 @@ int main() {
         signal(SIGINT, signal_handler);
         signal(SIGTERM, signal_handler);
 
-        // Create a Cleanup object to ensure resources are released properly
-        std::cout << "Creating Cleanup object..." << std::endl;
-        Cleanup cleanup;
-
-        // Start threads for processing loop
-        std::cout << "Starting processing threads..." << std::endl;
-        t = std::thread(&broadcast_server::process_messages, &server_instance);
-        l = std::thread(&broadcast_server::looping, &server_instance);
-
         // Run the ASIO io_service with the main thread
         std::cout << "Running server instance on port 9002..." << std::endl;
         server_instance.run(9002);
 
-        // Wait for the processing threads to finish
-        std::cout << "Joining threads..." << std::endl;
-        t.join();
-        l.join();
+        // Wait for the processing thread to finish
+        // std::cout << "Joining threads..." << std::endl;
+        tm.join();
         
-        // std::cout << "Deinitializing camera resources..." << std::endl;
-        // cam1.DeInitResources();
+        // Clean up the dedicated threads for clients
+        {
+            std::lock_guard<std::mutex> guard(server_instance.m_action_lock);
+            for (auto &client_thread : server_instance.client_threads) {
+                if (client_thread.joinable()) {
+                    client_thread.join();
+                }
+            }
+        }
+        
     } catch (websocketpp::exception const &e) {
         std::cout << "Exception caught: " << e.what() << std::endl;
         if (g_server_instance) {
