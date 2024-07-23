@@ -703,7 +703,7 @@ public:
         {
             lock_guard<mutex> guard(m_action_lock);
             m_actions.push(action(MESSAGE, hdl, msg));
-            std::cout<<"incomming message : "<< msg<< std::endl;
+            std::cout<<"incomming message : "<< &msg<< std::endl;
         }
         m_action_cond.notify_one();
     }
@@ -805,7 +805,7 @@ private:
 
     bool stop_streaming = false;
     bool get_data = false;
-    bool get_status = true;
+    bool get_status = false;
     const int max_client2_data_count = 3;
 
     std::atomic<bool> should_exit{false};
@@ -820,6 +820,7 @@ void signal_handler(int signal) {
     if (g_server_instance) {
         std::cout << "Stopping server instance..." << std::endl;
         g_server_instance->stop();
+        std::cout << "Stopping server completed" << std::endl;
     }
     if (tm.joinable()) {
         std::cout << "Joining thread tm..." << std::endl;
@@ -856,7 +857,7 @@ int main() {
         std::cout << "Registering signal handlers..." << std::endl;
         signal(SIGINT, signal_handler);
         signal(SIGTERM, signal_handler);
-
+        tm = std::thread(&broadcast_server::process_messages, &server_instance);
         // Run the ASIO io_service with the main thread
         std::cout << "Running server instance on port 9002..." << std::endl;
         server_instance.run(9002);
