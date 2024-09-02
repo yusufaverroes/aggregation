@@ -744,6 +744,10 @@ public:
                         m_server.send(hdl, "Ok", websocketpp::frame::opcode::text);
                     } else {
                         m_server.send(hdl, "Disconnected", websocketpp::frame::opcode::text);
+                        if (cam1.init()!=0){
+                            cam1.setStatus(true);
+                        }
+
                     }
                     std::cout << "success sending status" << std::endl;
                     get_status = false;
