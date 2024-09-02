@@ -681,7 +681,11 @@ public:
             m_action_cond.notify_one();
 
             // Start a dedicated thread for the new client connection
-            client_threads.emplace_back(&broadcast_server::client_thread, this, hdl);
+            
+            if (client1Count=1 || m_connections[hdl]!="client1"){
+                client_threads.emplace_back(&broadcast_server::client_thread, this, hdl);
+                std::cout << "created new thread" << std::endl;
+            }
 
         } catch (websocketpp::exception const &e) {
             std::cout << "Exception caught: " << e.what() << std::endl;
@@ -811,7 +815,7 @@ private:
     bool get_data = false;
     bool get_status = false;
     const int max_client2_data_count = 3;
-
+    int client1Count =0;
     std::atomic<bool> should_exit{false};
 };
 
