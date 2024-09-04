@@ -444,24 +444,24 @@ public:
 
             // Scale down the image
             cv::resize(jpegImage, scaledImage, cv::Size(), scaleddown, scaleddown); // Scale down by 50% (adjust as needed)
-            char strChar[MAX_BCR_LEN] = {0};
-            BcrInfo BI;
-            BI = getData(stBcrResult, strChar);
-            for (u_int8_t i = 0; i < BI.count; i++)
-            {
-                // Get the points for drawing polygon
-                std::vector<cv::Point> points;
-                points.push_back(cv::Point(BI.info[i].xpoint1 * scaleddown, BI.info[i].ypoint1 * scaleddown));
-                points.push_back(cv::Point(BI.info[i].xpoint2 * scaleddown, BI.info[i].ypoint2 * scaleddown));
-                points.push_back(cv::Point(BI.info[i].xpoint3 * scaleddown, BI.info[i].ypoint3 * scaleddown));
-                points.push_back(cv::Point(BI.info[i].xpoint4 * scaleddown, BI.info[i].ypoint4 * scaleddown));
+            // char strChar[MAX_BCR_LEN] = {0};
+            // BcrInfo BI;
+            // BI = getData(stBcrResult, strChar);
+            // for (u_int8_t i = 0; i < BI.count; i++)
+            // {
+            //     // Get the points for drawing polygon
+            //     std::vector<cv::Point> points;
+            //     points.push_back(cv::Point(BI.info[i].xpoint1 * scaleddown, BI.info[i].ypoint1 * scaleddown));
+            //     points.push_back(cv::Point(BI.info[i].xpoint2 * scaleddown, BI.info[i].ypoint2 * scaleddown));
+            //     points.push_back(cv::Point(BI.info[i].xpoint3 * scaleddown, BI.info[i].ypoint3 * scaleddown));
+            //     points.push_back(cv::Point(BI.info[i].xpoint4 * scaleddown, BI.info[i].ypoint4 * scaleddown));
 
-                // Draw the polygon
-                cv::polylines(scaledImage, points, true, cv::Scalar(255, 255, 0), 2);
-            }
-            scannedNum= stBcrResult->nCodeNum;
-            
-            // //pthread_mutex_unlock(&mutex);
+            //     // Draw the polygon
+            //     cv::polylines(scaledImage, points, true, cv::Scalar(255, 255, 0), 2);
+            // }
+            // scannedNum= stBcrResult->nCodeNum;
+
+            // pthread_mutex_unlock(&mutex);
         }
         return scaledImage;
     }
@@ -674,6 +674,7 @@ public:
                     m_connections[hdl] = client_id;
                 } else {
                     m_connections[hdl] = "client1";
+                    client1Count++;
                 }
                 std::cout << "Client connected with ID: " << client_id << std::endl;
             }
@@ -681,10 +682,11 @@ public:
             m_action_cond.notify_one();
 
             // Start a dedicated thread for the new client connection
-            
-            if (client1Count=1 || m_connections[hdl]!="client1"){
-                client_threads.emplace_back(&broadcast_server::client_thread, this, hdl);
-                std::cout << "created new thread" << std::endl;
+            client_threads.emplace_back(&broadcast_server::client_thread, this, hdl);
+            if (client1Count==1 || m_connections[hdl]!="client1"){
+                // client_threads.emplace_back(&broadcast_server::client_thread, this, hdl);
+                // std::cout << "created new thread" << std::endl;
+                stop_streaming=false;
             }
 
         } catch (websocketpp::exception const &e) {
@@ -698,6 +700,10 @@ public:
             std::cout << "Client disconnected, connection id: " << m_connections[hdl] << std::endl;
             m_connections.erase(hdl);
             m_action_cond.notify_one();
+            if(m_connections[hdl]=="client1"){
+                client1Count--;
+            }
+            if(client1Count<1){stop_streaming=true;}
         } catch (websocketpp::exception const &e) {
             std::cout << "Exception caught: " << e.what() << std::endl;
         }
@@ -711,6 +717,17 @@ public:
         }
         m_action_cond.notify_one();
     }
+    void streaming(){
+        std::cout << "start streaming" << std::endl;
+        while(!should_exit){
+            
+            if(!stop_streaming){
+                imencode(".jpeg", cam1.getImage(), buf);
+            }
+             usleep(100000);  
+        }
+        std::cout<<"exits the streaming thread"<<std::endl;
+    }
 
     void client_thread(connection_hdl hdl) {
         std::string client_id = m_connections[hdl];
@@ -720,9 +737,12 @@ public:
             if (client_id == "client1" && !stop_streaming) {
                 std::lock_guard<std::mutex> guard(m_action_lock);
                 try {
-                    std::vector<unsigned char> buf;
-                    imencode(".jpeg", cam1.getImage(), buf);
-                    m_server.send(hdl, buf.data(), buf.size(), websocketpp::frame::opcode::binary);
+                    // std::vector<unsigned char> buf;
+                    // imencode(".jpeg", cam1.getImage(), buf);
+                    std::vector<unsigned char> *bufP = &buf;
+                    std::vector<unsigned char> picture = *bufP;
+
+                    m_server.send(hdl, buf.data(), picture.size(), websocketpp::frame::opcode::binary);
                     m_server.send(hdl, std::to_string(cam1.scannedNum), websocketpp::frame::opcode::text);
                 } catch (std::exception const &e) {
                     std::cout << "Error on grabbing image or sending data: " << e.what() << std::endl;
@@ -811,6 +831,8 @@ private:
     mutex m_connection_lock;
     condition_variable m_action_cond;
 
+    std::vector<unsigned char> buf;
+
     bool stop_streaming = false;
     bool get_data = false;
     bool get_status = false;
@@ -822,6 +844,7 @@ private:
 // Global variables to allow access in signal handler
 broadcast_server* g_server_instance = nullptr;
 std::thread tm;
+std::thread st;
 
 void signal_handler(int signal) {
     std::cout << "Signal handler called with signal: " << signal << std::endl;
@@ -866,6 +889,8 @@ int main() {
         signal(SIGINT, signal_handler);
         signal(SIGTERM, signal_handler);
         tm = std::thread(&broadcast_server::process_messages, &server_instance);
+        st = std::thread(&broadcast_server::streaming, &server_instance);
+
         // Run the ASIO io_service with the main thread
         std::cout << "Running server instance on port 9002..." << std::endl;
         server_instance.run(9002);
@@ -873,6 +898,7 @@ int main() {
         // Wait for the processing thread to finish
         // std::cout << "Joining threads..." << std::endl;
         tm.join();
+        st.join();
         
         // Clean up the dedicated threads for clients
         {
