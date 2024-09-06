@@ -712,7 +712,7 @@ public:
         std::string client_id = m_connections[hdl];
         int client2_data_count = 0;
 
-        while (!should_exit) {
+        while (!should_exit && !hdl.expired()) {
             if (client_id == "client1" && !stop_streaming) {
                 std::lock_guard<std::mutex> guard(m_action_lock);
                 try {
@@ -758,6 +758,7 @@ public:
             }
             usleep(100000);  // Adjust as necessary
         }
+        std::cout<<"thread for "<< client_id << "is terminated" <<std::endl;
     }
 
     void process_messages() {
