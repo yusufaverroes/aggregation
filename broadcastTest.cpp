@@ -508,8 +508,26 @@ public:
                                  
                 int center_y = ((stBcrResult->stBcrInfoEx[i].pt[0].y + stBcrResult->stBcrInfoEx[i].pt[1].y +
                                    stBcrResult->stBcrInfoEx[i].pt[2].y + stBcrResult->stBcrInfoEx[i].pt[3].y)*scaleddown) /4;
+                int sum_sides = 0;
+
+// Calculate the distance between each pair of adjacent points
+                int side1 = sqrt(pow(stBcrResult->stBcrInfoEx[i].pt[1].x - stBcrResult->stBcrInfoEx[i].pt[0].x, 2) + 
+                                pow(stBcrResult->stBcrInfoEx[i].pt[1].y - stBcrResult->stBcrInfoEx[i].pt[0].y, 2));
+
+                int side2 = sqrt(pow(stBcrResult->stBcrInfoEx[i].pt[2].x - stBcrResult->stBcrInfoEx[i].pt[1].x, 2) + 
+                                pow(stBcrResult->stBcrInfoEx[i].pt[2].y - stBcrResult->stBcrInfoEx[i].pt[1].y, 2));
+
+                int side3 = sqrt(pow(stBcrResult->stBcrInfoEx[i].pt[3].x - stBcrResult->stBcrInfoEx[i].pt[2].x, 2) + 
+                                pow(stBcrResult->stBcrInfoEx[i].pt[3].y - stBcrResult->stBcrInfoEx[i].pt[2].y, 2));
+
+                int side4 = sqrt(pow(stBcrResult->stBcrInfoEx[i].pt[0].x - stBcrResult->stBcrInfoEx[i].pt[3].x, 2) + 
+                                pow(stBcrResult->stBcrInfoEx[i].pt[0].y - stBcrResult->stBcrInfoEx[i].pt[3].y, 2));
+
+                // Sum the lengths of all four sides
+                sum_sides = side1 + side2 + side3 + side4;
                 // Format the output string
-                int result = snprintf(output_string, MAX_BCR_LEN, "%s:%d:%d:%d;", strChar, stBcrResult->stBcrInfoEx->nIDRScore, center_x,center_y);
+                int result = snprintf(output_string, MAX_BCR_LEN, "%s:%d:%d:%d:%d;", strChar, stBcrResult->stBcrInfoEx->nIDRScore, center_x,center_y, sum_sides);
+
                 // Check if the formatting was successful and the string wasn't truncated
                 if (result < 0 || result >= MAX_BCR_LEN)
                 {
