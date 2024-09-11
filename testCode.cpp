@@ -102,7 +102,7 @@ private:
     BcrInfo getData(MV_CODEREADER_RESULT_BCR_EX2 *stBcrResult, char strChar[MAX_BCR_LEN])
     {
         BcrInfo BI;
-        // char *output_string;
+
         for (unsigned int i = 0; i < stBcrResult->nCodeNum; i++)
         {
             memset(strChar, 0, MAX_BCR_LEN);
@@ -126,29 +126,8 @@ private:
 
             BI.count = stBcrResult->nCodeNum;
 
-            //Rizal start comment
-
-            // output_string = (char *)malloc(MAX_BCR_LEN * sizeof(char));
-            // if (output_string == NULL)
-            // {
-            //     printf("Memory allocation failed!\n");
-
-            //     int result = snprintf(output_string, MAX_BCR_LEN, "%d:%s:%d;", i, strChar, stBcrResult->stBcrInfoEx2->nIDRScore);
-
-            //     // Check if the formatting was successful and the string wasn't truncated
-            //     if (result < 0 || result >= MAX_BCR_LEN)
-            //     {
-            //         printf("Formatting error or string truncated!\n");
-            //         free(output_string);
-            //     }
-
-            //     printf("%d:%s:%d;\r\n",
-            //            i, strChar, stBcrResult->stBcrInfoEx2->nIDRScore);
-            // }
-
-            //Rizal stop comment
         }
-        // free(output_string);
+
 
         return BI;
     }
@@ -161,7 +140,8 @@ private:
 
     // ch:初始化资源用于存储图像信息 | en：Initialize resources to store the image
     int InitResource(void *pHandle)
-    {
+    {   
+        
         int nRet = MV_CODEREADER_OK;
 
         try
@@ -263,6 +243,7 @@ public:
         MV_CODEREADER_DEVICE_INFO_LIST stDeviceList;
         memset(&stDeviceList, 0, sizeof(MV_CODEREADER_DEVICE_INFO_LIST));
         nRet = MV_CODEREADER_EnumDevices(&stDeviceList, MV_CODEREADER_GIGE_DEVICE);
+        
         if (MV_CODEREADER_OK != nRet)
         {
             printf("Enum Devices fail! nRet [%#x]\r\n", nRet);
@@ -465,7 +446,7 @@ public:
             }
             scannedNum= stBcrResult->nCodeNum;
             
-            // //pthread_mutex_unlock(&mutex);
+            pthread_mutex_unlock(&mutex);
         }
         return scaledImage;
     }
@@ -558,7 +539,7 @@ public:
             printf("Memory allocation failed for result string!\n");
             return 0;
         }
-
+        
         // Copy the content of temp_string to result_string
         strcpy(result_string, temp_string);
 
@@ -765,11 +746,8 @@ public:
                     if (cam1.getStatus()) {
                         m_server.send(hdl, "Ok", websocketpp::frame::opcode::text);
                     } else {
-                        //Rizal Adding DeinitResource
-                        cam1.DeInitResources();
-                        //=============================
-
                         m_server.send(hdl, "Disconnected", websocketpp::frame::opcode::text);
+                        cam1.DeInitResources();
                         if (cam1.init()!=0){
                             cam1.setStatus(true);
                         }
@@ -784,6 +762,7 @@ public:
             }
             usleep(100000);  // Adjust as necessary
         }
+       
         std::cout<<"thread for "<< client_id << "is terminated" <<std::endl;
     }
 

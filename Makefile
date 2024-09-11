@@ -19,3 +19,7 @@ g++ -std=c++11 -o broadcastTest broadcastTest.cpp -I/home/widatech/Documents/Tra
 
 
 g++ -std=c++11 -o broadcastTest broadcastTest.cpp -I/home/widatech/Documents/TracknTrace/aggregasi/aggregation-main/websocketcpp -Wall -IInclude  -L. -Wl,-Bdynamic -/home/widatech/Documents/TracknTrace/aggregasi/aggregation-main/lMvCodeReaderCtrl -lpthread -ldl -Wl,-rpath=./ -I/usr/include/opencv4 `pkg-config --cflags --libs opencv4`
+
+g++ -std=c++11 -o testCode testCode.cpp -I/home/widatech/Documents/TracknTrace/aggregasi/aggregation-main/websocketcpp -Wall -IInclude  -L. -Wl,-Bdynamic -lMvCodeReaderCtrl -lpthread -ldl -Wl,-rpath=./ -I/usr/include/opencv4 `pkg-config --cflags --libs opencv4`
+
+g++ -std=c++11 -o testCode testCode.cpp -I/home/widatech/Documents/TracknTrace/aggregasi/aggregation-main/websocketcpp -Wall -IInclude  -L. -Wl,-Bdynamic -/home/widatech/Documents/TracknTrace/aggregasi/aggregation-main/lMvCodeReaderCtrl -lpthread -ldl -Wl,-rpath=./ -I/usr/include/opencv4 `pkg-config --cflags --libs opencv4`
