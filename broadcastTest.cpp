@@ -234,6 +234,7 @@ private:
 bool deviceIsConnected;
 public:
     int scannedNum=0;
+    char *detailString=NULL;
     Camera() : deviceIsConnected(true) {};
     static void __stdcall exceptionCallBack(unsigned int nMsgType, void* pUser) {
 
@@ -257,6 +258,9 @@ public:
     }
     void setStatus(bool status){
         deviceIsConnected = status;
+    }
+    void freeDetailString() {
+        free(detailString);
     }
     int init()
     {
@@ -412,64 +416,84 @@ public:
         return 1;
     }
 
-    cv::Mat getImage()
+cv::Mat getImage(bool draw = true)
+{
+    // ch:开始取流 | en:Start grab image
+    cv::Mat scaledImage;
+    MV_CODEREADER_IMAGE_OUT_INFO_EX2 stImageInfo = {0};
+    memset(&stImageInfo, 0, sizeof(MV_CODEREADER_IMAGE_OUT_INFO_EX2));
+    unsigned char *pData = NULL;
+
+    nRet = MV_CODEREADER_GetOneFrameTimeoutEx2(handle, &pData, &stImageInfo, 1000);
+
+    if (nRet == MV_CODEREADER_OK)
     {
-        // ch:开始取流 | en:Start grab image
-        cv::Mat scaledImage;
-        MV_CODEREADER_IMAGE_OUT_INFO_EX2 stImageInfo = {0};
-        memset(&stImageInfo, 0, sizeof(MV_CODEREADER_IMAGE_OUT_INFO_EX2));
-        unsigned char *pData = NULL;
-
-        nRet = MV_CODEREADER_GetOneFrameTimeoutEx2(handle, &pData, &stImageInfo, 1000);
-        // printf("Get One Frame: nChannelID[%d] Width[%d], Height[%d], nFrameNum[%d], nTriggerIndex[%d]\n",
-        // stImageInfo.nChannelID, stImageInfo.nWidth, stImageInfo.nHeight, stImageInfo.nFrameNum, stImageInfo.nTriggerIndex);
-
-        if (nRet == MV_CODEREADER_OK)
+        pthread_mutex_lock(&mutex);
+        MV_CODEREADER_RESULT_BCR_EX2 *stBcrResult = (MV_CODEREADER_RESULT_BCR_EX2 *)stImageInfo.UnparsedBcrList.pstCodeListEx2;
+        if (NULL != g_pstImageInfoEx2)
         {
-            pthread_mutex_lock(&mutex);
-            MV_CODEREADER_RESULT_BCR_EX2 *stBcrResult = (MV_CODEREADER_RESULT_BCR_EX2 *)stImageInfo.UnparsedBcrList.pstCodeListEx2;
-            if (NULL != g_pstImageInfoEx2)
+            memcpy(g_pstImageInfoEx2, &stImageInfo, sizeof(MV_CODEREADER_IMAGE_OUT_INFO_EX2));
+        }
+
+        if (NULL != g_pcDataBuf && stImageInfo.nFrameLen < g_nMaxImageSize)
+        {
+            memcpy(g_pcDataBuf, pData, stImageInfo.nFrameLen);
+        }
+
+        pthread_mutex_unlock(&mutex);
+
+        cv::Mat jpegImage;
+        float scaleddown = 0.2;
+        jpegImage = cv::imdecode(cv::Mat(1, g_pstImageInfoEx2->nFrameLen, CV_8UC1, g_pcDataBuf), cv::IMREAD_COLOR);
+        cv::resize(jpegImage, scaledImage, cv::Size(), scaleddown, scaleddown);
+        char strChar[MAX_BCR_LEN] = {0};
+        BcrInfo BI;
+        BI = getData(stBcrResult, strChar);
+        std::stringstream ss;  // For appending strings
+
+        // If this is the first iteration, initialize detailString
+        if (detailString == NULL)
+        {
+            ss.str("");  // Clear the stringstream just in case
+        }
+        else
+        {
+            ss << detailString;  // Append the current value of detailString
+        }
+
+        for (u_int8_t i = 0; i < BI.count; i++)
+        {   
+            if (draw)
             {
-                memcpy(g_pstImageInfoEx2, &stImageInfo, sizeof(MV_CODEREADER_IMAGE_OUT_INFO_EX2));
-            }
-
-            if (NULL != g_pcDataBuf && stImageInfo.nFrameLen < g_nMaxImageSize)
-            {
-                memcpy(g_pcDataBuf, pData, stImageInfo.nFrameLen);
-            }
-
-            pthread_mutex_unlock(&mutex);
-
-            cv::Mat jpegImage;
-
-            float scaleddown = 0.2;
-            // Read JPEG image data into OpenCV Mat
-            jpegImage = cv::imdecode(cv::Mat(1, g_pstImageInfoEx2->nFrameLen, CV_8UC1, g_pcDataBuf), cv::IMREAD_COLOR);
-
-            // Scale down the image
-            cv::resize(jpegImage, scaledImage, cv::Size(), scaleddown, scaleddown); // Scale down by 50% (adjust as needed)
-            char strChar[MAX_BCR_LEN] = {0};
-            BcrInfo BI;
-            BI = getData(stBcrResult, strChar);
-            for (u_int8_t i = 0; i < BI.count; i++)
-            {
-                // Get the points for drawing polygon
                 std::vector<cv::Point> points;
                 points.push_back(cv::Point(BI.info[i].xpoint1 * scaleddown, BI.info[i].ypoint1 * scaleddown));
                 points.push_back(cv::Point(BI.info[i].xpoint2 * scaleddown, BI.info[i].ypoint2 * scaleddown));
                 points.push_back(cv::Point(BI.info[i].xpoint3 * scaleddown, BI.info[i].ypoint3 * scaleddown));
                 points.push_back(cv::Point(BI.info[i].xpoint4 * scaleddown, BI.info[i].ypoint4 * scaleddown));
-
-                // Draw the polygon
                 cv::polylines(scaledImage, points, true, cv::Scalar(255, 255, 0), 2);
             }
-            scannedNum= stBcrResult->nCodeNum;
-            
-            // //pthread_mutex_unlock(&mutex);
+            else
+            {
+                // Append the data for each iteration
+                ss << "x1: " << BI.info[i].xpoint1 * scaleddown << ", y1: " << BI.info[i].ypoint1 * scaleddown << ",";
+                ss << "x2: " << BI.info[i].xpoint2 * scaleddown << ", y2: " << BI.info[i].ypoint2 * scaleddown << ", ";
+                ss << "x3: " << BI.info[i].xpoint3 * scaleddown << ", y3: " << BI.info[i].ypoint3 * scaleddown << ", ";
+                ss << "x4: " << BI.info[i].xpoint4 * scaleddown << ", y4: " << BI.info[i].ypoint4 * scaleddown << "; ";
+            }
+            scannedNum = stBcrResult->nCodeNum;
         }
-        return scaledImage;
-    }
 
+        // Allocate memory for detailString and copy the concatenated result
+        std::string resultString = ss.str();
+        if (detailString != NULL)
+        {
+            delete[] detailString;  // Free the previously allocated memory
+        }
+        detailString = new char[resultString.length() + 1];  // Allocate space
+        strcpy(detailString, resultString.c_str());          // Copy the string
+    }
+    return scaledImage;
+}
     char *getString()
     {
         char *result_string = NULL;
@@ -564,6 +588,7 @@ public:
 
         return result_string;
     }
+    
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -739,9 +764,10 @@ public:
                 std::lock_guard<std::mutex> guard(m_action_lock);
                 try {
                     std::vector<unsigned char> buf;
-                    imencode(".jpeg", cam1.getImage(), buf);
+                    imencode(".jpeg", cam1.getImage(false), buf);
                     m_server.send(hdl, buf.data(), buf.size(), websocketpp::frame::opcode::binary);
-                    m_server.send(hdl, std::to_string(cam1.scannedNum), websocketpp::frame::opcode::text);
+                    m_server.send(hdl, cam1.detailString, websocketpp::frame::opcode::text);
+                    // cam1.freeDetailString();
                 } catch (std::exception const &e) {
                     std::cout << "Error on grabbing image or sending data: " << e.what() << std::endl;
                     break;
