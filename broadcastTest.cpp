@@ -234,7 +234,7 @@ private:
 bool deviceIsConnected;
 public:
     int scannedNum=0;
-    char *detailString=NULL;
+    std::string detailString;
     Camera() : deviceIsConnected(true) {};
     static void __stdcall exceptionCallBack(unsigned int nMsgType, void* pUser) {
 
@@ -259,9 +259,9 @@ public:
     void setStatus(bool status){
         deviceIsConnected = status;
     }
-    void freeDetailString() {
-        free(detailString);
-    }
+    // void freeDetailString() {
+    //     free(detailString);
+    // }
     int init()
     {
         MV_CODEREADER_DEVICE_INFO_LIST stDeviceList;
@@ -446,26 +446,31 @@ cv::Mat getImage(bool draw = true)
         float scaleddown = 0.2;
         jpegImage = cv::imdecode(cv::Mat(1, g_pstImageInfoEx2->nFrameLen, CV_8UC1, g_pcDataBuf), cv::IMREAD_COLOR);
         cv::resize(jpegImage, scaledImage, cv::Size(), scaleddown, scaleddown);
+       
+        // If this is the first iteration, initialize detailString
+        // if (detailString == NULL)
+        // {
+        //     ss.str("");  // Clear the stringstream just in case
+        // }
+        // else
+        // {
+        //     ss << detailString;  // Append the current value of detailString
+        // }
+       
+        if (stBcrResult->nCodeNum!=0){
+            
         char strChar[MAX_BCR_LEN] = {0};
         BcrInfo BI;
         BI = getData(stBcrResult, strChar);
         std::stringstream ss;  // For appending strings
 
-        // If this is the first iteration, initialize detailString
-        if (detailString == NULL)
-        {
-            ss.str("");  // Clear the stringstream just in case
-        }
-        else
-        {
-            ss << detailString;  // Append the current value of detailString
-        }
-
+        
         for (u_int8_t i = 0; i < BI.count; i++)
         {   
+            std::vector<cv::Point> points;
             if (draw)
             {
-                std::vector<cv::Point> points;
+                // std::vector<cv::Point> points;
                 points.push_back(cv::Point(BI.info[i].xpoint1 * scaleddown, BI.info[i].ypoint1 * scaleddown));
                 points.push_back(cv::Point(BI.info[i].xpoint2 * scaleddown, BI.info[i].ypoint2 * scaleddown));
                 points.push_back(cv::Point(BI.info[i].xpoint3 * scaleddown, BI.info[i].ypoint3 * scaleddown));
@@ -484,13 +489,17 @@ cv::Mat getImage(bool draw = true)
         }
 
         // Allocate memory for detailString and copy the concatenated result
-        std::string resultString = ss.str();
-        if (detailString != NULL)
-        {
-            delete[] detailString;  // Free the previously allocated memory
-        }
-        detailString = new char[resultString.length() + 1];  // Allocate space
-        strcpy(detailString, resultString.c_str());          // Copy the string
+        detailString = ss.str();
+
+        // // std::cout<<"result :"<<resultString<<std::endl;
+        // if (detailString != NULL)
+        // {
+        //     delete[] detailString;  // Free the previously allocated memory
+        // }
+        // detailString = new char[resultString.length() + 1];  // Allocate space
+        // strcpy(detailString, resultString.c_str());          // Copy the string
+        
+    }else { detailString="empty";}
     }
     return scaledImage;
 }
